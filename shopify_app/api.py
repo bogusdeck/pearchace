@@ -122,3 +122,61 @@ async def _get_client(shop_url):
     except Client.DoesNotExist:
         print(f"Client with shop URL {shop_url} does not exist.")
         return None
+
+
+async def update_collection_products_order(shop_url, collection_id, products_order):
+    """
+    Updates the display order of products in a specific collection in a Shopify store using the GraphQL API.
+
+    Args:
+        shop_url (str): The URL of the Shopify store.
+        collection_id (str): The ID of the collection to update.
+        products_order (list): A list of product IDs in the desired display order.
+
+    Returns:
+        bool: True if the update was successful, False otherwise.
+    """
+    client = await _get_client(shop_url)
+    if not client:
+        return False
+
+    access_token = client.access_token
+    api_version = apps.get_app_config('shopify_app').SHOPIFY_API_VERSION
+    headers = _get_shopify_headers(access_token)
+
+    url = f"https://{shop_url}/admin/api/{api_version}/graphql.json"
+
+    product_reorder_input = [{"id": f"gid://shopify/Product/{product_id}"} for product_id in products_order]
+
+    mutation = f"""
+    mutation {{
+      collectionReorderProducts(
+        id: "gid://shopify/Collection/{collection_id}",
+        moves: [
+          {"".join([f"{{id: \"gid://shopify/Product/{move['id']}\", newPosition: {index}}}" for index, move in enumerate(product_reorder_input)])}
+        ]
+      ) {{
+        job {{
+          id
+          status
+        }}
+        userErrors {{
+          field
+          message
+        }}
+      }}
+    }}
+    """
+    
+    async with aiohttp.ClientSession() as session:
+        async with session.post(url, json={"query": mutation}, headers=headers) as response:
+            if response.status == 200:
+                data = await response.json()
+                errors = data.get("data", {}).get("collectionReorderProducts", {}).get("userErrors", [])
+                if errors:
+                    print(f"Errors encountered: {errors}")
+                    return False
+                return True
+            else:
+                print(f"Error updating products order: {response.status} - {await response.text()}")
+                return False
