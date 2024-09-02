@@ -3,6 +3,7 @@ from django.urls import reverse
 from django.conf import settings
 from . import views
 
+#JUST CHECKING IF 'SHOPIFY' IS IN THE SESSION
 def shop_login_required(fn):
     def wrapper(request, *args, **kwargs):
         if not hasattr(request, 'session') or 'shopify' not in request.session:

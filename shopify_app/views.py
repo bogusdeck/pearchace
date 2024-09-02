@@ -6,15 +6,16 @@ from django.apps import apps
 import hmac, base64, hashlib, binascii, os
 import shopify
 from .models import Client
+from .decorators import shop_login_required
 
 def _new_session(shop_url):
     api_version = apps.get_app_config('shopify_app').SHOPIFY_API_VERSION
     return shopify.Session(shop_url, api_version)
 
-# Ask user for their ${shop}.myshopify.com address
+
 def login(request):
-    # If the ${shop}.myshopify.com address is already provided in the URL,
-    # just skip to authenticate
+    # If shop url is provided in url --> skip to authenticate
+
     if request.GET.get('shop'):
         return authenticate(request)
     return render(request, 'shopify_app/login.html', {})
@@ -35,14 +36,13 @@ def finalize(request):
     api_secret = apps.get_app_config('shopify_app').SHOPIFY_API_SECRET
     params = request.GET.dict()
 
-    # Verify the state parameter to prevent CSRF
     if request.session['shopify_oauth_state_param'] != params['state']:
         messages.error(request, 'Anti-forgery state token does not match the initial request.')
         return redirect(reverse(login))
     else:
         request.session.pop('shopify_oauth_state_param', None)
 
-    # Verify the HMAC to ensure the request comes from Shopify
+    # hash based message authentication code
     myhmac = params.pop('hmac')
     line = '&'.join([
         '%s=%s' % (key, value)
@@ -96,7 +96,24 @@ def finalize(request):
     request.session.pop('return_to', None)
     return redirect(request.session.get('return_to', reverse('root_path')))
 
+@shop_login_required
 def logout(request):
-    request.session.pop('shopify', None)
-    messages.info(request, "Successfully logged out.")
+    if 'shopify' in request.session:
+        shop_url = request.session['shopify']['shop_url']
+
+        try:
+            client = Client.objects.get(shop_name=shop_url)
+            client.access_token = None
+            client.is_active = False
+            client.save()
+
+            request.session.pop('shopify', None)
+            print("successfully logged out,",shop_url)
+            messages.info(request, "Successfully logged out.")
+        except Client.DoesNotExist:
+            print("client does not exist")
+    
+    else:
+        print("you are not logged in buddy")
+
     return redirect(reverse(login))

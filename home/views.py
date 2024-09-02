@@ -5,4 +5,4 @@ from shopify_app.decorators import shop_login_required
 
 @shop_login_required
 def index(request):
-    return HttpResponse("<h1>Application Running</h1>")
+    return HttpResponse("<h1>Application and user is authenticated Running</h1> <h2>Dashboard</h2>")
