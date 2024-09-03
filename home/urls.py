@@ -6,5 +6,5 @@ urlpatterns = [
     path('', views.index, name='root_path'),
     path('api/collections/', views.get_collections, name='collections_list_api'),
     path('api/products/', views.get_products, name='product_list_api'),
-    path('api/update-products-order/', update_product_order, name="update_products_order_api")
+    path('api/update-products-order/', views.update_product_order, name="update_products_order_api")
 ]
