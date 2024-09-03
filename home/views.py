@@ -36,8 +36,8 @@ def get_collections(request):
 @require_GET
 def get_products(request):
     # api returns all products of a collection 
-    shop_url = request.session.get('shopify', {}).get('shop_url')  # Get the shop URL from the session
-    collection_id = request.GET.get('collection_id')  # Get the collection ID from the request parameters
+    shop_url = request.session.get('shopify', {}).get('shop_url')  
+    collection_id = request.GET.get('collection_id')  
 
     if not shop_url:
         return JsonResponse({'error': 'Shop URL not found in session'}, status=400)
@@ -63,11 +63,11 @@ def update_product_order(request):
     Returns:
         JsonResponse: A JSON response indicating success or failure.
     """
-    shop_url = request.session.get('shopify', {}).get('shop_url')  # getting shop url from django session
-    collection_id = request.POST.get('collection_id')  # getting collection id from the request data
+    shop_url = request.session.get('shopify', {}).get('shop_url')  
+    collection_id = request.POST.get('collection_id')  
     
     #need to update this later --> sorted algo give this product order
-    products_order = request.POST.getlist('products_order[]')  # sorted list of productIDs
+    products_order = request.POST.getlist('products_order[]')  
 
     if not shop_url:
         return JsonResponse({'error': 'Shop URL not found in session'}, status=400)

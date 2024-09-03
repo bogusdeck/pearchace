@@ -1,7 +1,8 @@
 from django.db import models
 from django.utils import timezone
 
-#change
+
+#done
 class Client(models.Model):
     client_id = models.BigAutoField(primary_key=True)  
     shop_name = models.CharField(max_length=255)  
@@ -16,9 +17,29 @@ class Client(models.Model):
     uninstall_date = models.DateTimeField(blank=True, null=True)  
     created_at = models.DateTimeField(auto_now_add=True)  
     updated_at = models.DateTimeField(auto_now=True)  
-    #schedule frequency = hourly, daily, weekly, custom
-    #stock location = all location, online loc, offline loc
     
+    SCHEDULE_FREQUENCY_CHOICES = [
+        ('hourly', 'Hourly'),
+        ('daily', 'Daily'),
+        ('weekly', 'Weekly'),
+        ('custom', 'Custom'),
+    ]
+    schedule_frequency = models.CharField(
+        max_length=10, 
+        choices=SCHEDULE_FREQUENCY_CHOICES, 
+        default='daily'
+    )
+
+    STOCK_LOCATION_CHOICES = [
+        ('all', 'All Locations'),
+        ('online', 'Online Locations'),
+        ('offline', 'Offline Locations'),
+    ]
+    stock_location = models.CharField(
+        max_length=10, 
+        choices=STOCK_LOCATION_CHOICES, 
+        default='all'
+    )
 
     def __str__(self):
         return self.shop_name
@@ -37,6 +58,12 @@ class SortingPlan(models.Model):
     addon_sorts_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
+    #cost_month = decieal field
+    #cost_annual = decimal field
+    #sort_limit = interger
+    #order_limit = interger
+    #clientid for royal plan?
+
 
     def __str__(self):
         return self.name
@@ -52,6 +79,7 @@ class SortingAlgorithm(models.Model):
 
     def __str__(self):
         return self.name
+
 #change
 class CollectionSort(models.Model):
     sort_id = models.AutoField(primary_key=True)
@@ -63,6 +91,13 @@ class CollectionSort(models.Model):
     products_count = models.IntegerField()
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
+    # status = True or false
+    # set_creteria = 
+    #  Condition settings for sales performance
+    # actions 
+    # review period
+    # Pinned Products [] (product ids list is stored in this field)
+    
 
     def __str__(self):
         return f"Collection Sort {self.sort_id} for {self.client.shop_name} on {self.sort_date}"
