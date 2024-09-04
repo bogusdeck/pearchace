@@ -180,3 +180,53 @@ async def update_collection_products_order(shop_url, collection_id, products_ord
             else:
                 print(f"Error updating products order: {response.status} - {await response.text()}")
                 return False
+
+async def fetch_client_data(shop_url):
+    """
+    Fetches the client's shop data from Shopify using the GraphQL API.
+
+    Args:
+        shop_url (str): The URL of the Shopify store.
+
+    Returns:
+        dict: A dictionary containing the client's shop data or an empty dictionary if an error occurs.
+    """
+    client = await _get_client(shop_url)
+    if not client:
+        return {}
+
+    access_token = client.access_token
+    api_version = apps.get_app_config('shopify_app').SHOPIFY_API_VERSION
+    headers = _get_shopify_headers(access_token)
+
+    url = f"https://{shop_url}/admin/api/{api_version}/graphql.json"
+
+    query = """
+    {
+      shop {
+        id
+        name
+        email
+        primaryDomain {
+          url
+          host
+        }
+        myshopifyDomain
+        plan {
+          displayName
+        }
+        createdAt
+        timezoneAbbreviation
+      }
+    }
+    """
+    
+    async with aiohttp.ClientSession() as session:
+        async with session.post(url, json={"query": query}, headers=headers) as response:
+            if response.status == 200:
+                data = await response.json()
+                shop_data = data.get("data", {}).get("shop", {})
+                return shop_data
+            else:
+                print(f"Error fetching shop data: {response.status} - {await response.text()}")
+                return {}

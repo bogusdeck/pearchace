@@ -18,7 +18,7 @@ class Client(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     default_algo = models.ForeignKey('SortingAlgorithm', on_delete=models.SET_NULL, null=True, blank=True)
-    member = models.BooleanField(default=False)  # New field
+    member = models.BooleanField(default=False)  
     
     SCHEDULE_FREQUENCY_CHOICES = [
         ('hourly', 'Hourly'),

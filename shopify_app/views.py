@@ -1,4 +1,5 @@
 from django.shortcuts import render, redirect
+from django.http import JsonResponse
 from django.contrib import messages
 from django.urls import reverse
 from django.template import RequestContext
@@ -12,49 +13,39 @@ def _new_session(shop_url):
     api_version = apps.get_app_config('shopify_app').SHOPIFY_API_VERSION
     return shopify.Session(shop_url, api_version)
 
-
 def login(request):
-    # If shop url is provided in url --> skip to authenticate
-
-    if request.GET.get('shop'):
-        return authenticate(request)
-    return render(request, 'shopify_app/login.html', {})
-
-def authenticate(request):
-    shop_url = request.GET.get('shop', request.POST.get('shop')).strip()
+    """
+    Initiates the Shopify OAuth process by redirecting to Shopify for authentication.
+    """
+    shop_url = request.GET.get('shop')
     if not shop_url:
-        messages.error(request, "A shop param is required")
-        return redirect(reverse(login))
+        return JsonResponse({'error': 'Shop URL parameter is required'}, status=400)
+
     scope = apps.get_app_config('shopify_app').SHOPIFY_API_SCOPE
-    redirect_uri = request.build_absolute_uri(reverse(finalize))
+    redirect_uri = request.build_absolute_uri(reverse('finalize'))
     state = binascii.b2a_hex(os.urandom(15)).decode("utf-8")
     request.session['shopify_oauth_state_param'] = state
     permission_url = _new_session(shop_url).create_permission_url(scope, redirect_uri, state)
     return redirect(permission_url)
 
 def finalize(request):
+    """
+    Handles the OAuth callback from Shopify, finalizes authentication, and stores the access token.
+    """
     api_secret = apps.get_app_config('shopify_app').SHOPIFY_API_SECRET
     params = request.GET.dict()
 
-    if request.session['shopify_oauth_state_param'] != params['state']:
-        messages.error(request, 'Anti-forgery state token does not match the initial request.')
-        return redirect(reverse(login))
-    else:
-        request.session.pop('shopify_oauth_state_param', None)
-        
-    # hash based message authentication code
+    if request.session.get('shopify_oauth_state_param') != params.get('state'):
+        return JsonResponse({'error': 'Invalid state parameter'}, status=400)
+
     myhmac = params.pop('hmac')
-    line = '&'.join([
-        '%s=%s' % (key, value)
-        for key, value in sorted(params.items())
-    ])
+    line = '&'.join([f'{key}={value}' for key, value in sorted(params.items())])
     h = hmac.new(api_secret.encode('utf-8'), line.encode('utf-8'), hashlib.sha256)
     if not hmac.compare_digest(h.hexdigest(), myhmac):
-        messages.error(request, "Could not verify a secure login")
-        return redirect(reverse(login))
+        return JsonResponse({'error': 'Could not verify secure login'}, status=400)
 
     try:
-        shop_url = params['shop']
+        shop_url = params.get('shop')
         session = _new_session(shop_url)
         access_token = session.request_token(request.GET)
 
@@ -88,16 +79,17 @@ def finalize(request):
             "access_token": access_token
         }
 
-    except Exception as e:
-        messages.error(request, f"Could not log in to Shopify store. Error: {str(e)}")
-        return redirect(reverse(login))
+        return JsonResponse({'success': 'Logged in successfully'}, status=200)
 
-    messages.info(request, "Logged in to Shopify store.")
-    request.session.pop('return_to', None)
-    return redirect(request.session.get('return_to', reverse('root_path')))
+    except Exception as e:
+        return JsonResponse({'error': f'Could not log in: {str(e)}'}, status=500)
+
 
 @shop_login_required
 def logout(request):
+    """
+    Logs out the user by clearing the session and deactivating the access token.
+    """
     if 'shopify' in request.session:
         shop_url = request.session['shopify']['shop_url']
 
@@ -108,12 +100,10 @@ def logout(request):
             client.save()
 
             request.session.pop('shopify', None)
-            print("successfully logged out,",shop_url)
-            messages.info(request, "Successfully logged out.")
+            return JsonResponse({'success': 'Successfully logged out'}, status=200)
         except Client.DoesNotExist:
-            print("client does not exist")
-    
+            return JsonResponse({'error': 'Client does not exist'}, status=404)
     else:
-        print("you are not logged in buddy")
+        return JsonResponse({'error': 'Not logged in'}, status=400)
+    
 
-    return redirect(reverse(login))

@@ -13,7 +13,7 @@ from django.views import View
 from asgiref.sync import sync_to_async
 
 from shopify_app.models import Client
-from shopify_app.api import fetch_collections, fetch_products_by_collection, update_collection_products_order
+from shopify_app.api import fetch_collections, fetch_products_by_collection, update_collection_products_order, fetch_client_data
 
 @shop_login_required
 def index(request):
@@ -135,5 +135,24 @@ def get_client_info(request):
     
     except Client.DoesNotExist:
         return JsonResponse({'error': 'Client not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@require_GET
+@shop_login_required
+def get_shopify_client_data(request):
+    shop_url = request.session.get('shopify', {}).get('shop_url')
+
+    if not shop_url:
+        return JsonResponse({'error': 'Shop URL not found in session'}, status=400)
+
+    try:
+        # Fetch the client's shop data
+        shop_data = asyncio.run(fetch_client_data(shop_url))
+        if shop_data:
+            return JsonResponse({'shop_data': shop_data}, status=200)
+        else:
+            return JsonResponse({'error': 'Failed to fetch shop data'}, status=500)
+
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
