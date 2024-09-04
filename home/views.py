@@ -7,7 +7,12 @@ from django.views import View
 from django.views.decorators.http import require_GET, require_POST
 from django.views.decorators.csrf import csrf_protect
 from django.contrib.auth.decorators import login_required
+from django.db.models import F
+from django.utils.decorators import method_decorator
+from django.views import View
+from asgiref.sync import sync_to_async
 
+from shopify_app.models import Client
 from shopify_app.api import fetch_collections, fetch_products_by_collection, update_collection_products_order
 
 @shop_login_required
@@ -84,5 +89,51 @@ def update_product_order(request):
             return JsonResponse({'success': True}, status=200)
         else:
             return JsonResponse({'error': 'Failed to update product order'}, status=500)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+    
+
+@shop_login_required
+@require_GET
+def get_client_info(request):
+    """
+    API endpoint to get the client information for the current session.
+
+    Returns:
+        JsonResponse: A JSON response with client information.
+    """
+    shop_url = request.session.get('shopify', {}).get('shop_url')
+
+    if not shop_url:
+        return JsonResponse({'error': 'Shop URL not found in session'}, status=400)
+
+    try:
+        # Fetch the client based on the shop_url synchronously
+        client = Client.objects.get(shop_url=shop_url)
+        
+        client_data = {
+            'client_id': client.client_id,
+            'shop_name': client.shop_name,
+            'email': client.email,
+            'phone_number': client.phone_number,
+            'shop_url': client.shop_url,
+            'country': client.country,
+            'is_active': client.is_active,
+            'access_token': client.access_token,
+            'trial_used': client.trial_used,
+            'installation_date': client.installation_date,
+            'uninstall_date': client.uninstall_date,
+            'created_at': client.created_at,
+            'updated_at': client.updated_at,
+            'default_algo': client.default_algo.name if client.default_algo else None,
+            'schedule_frequency': client.schedule_frequency,
+            'stock_location': client.stock_location,
+            'member': client.member,
+        }
+
+        return JsonResponse({'client': client_data}, status=200)
+    
+    except Client.DoesNotExist:
+        return JsonResponse({'error': 'Client not found'}, status=404)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)

@@ -41,7 +41,7 @@ def finalize(request):
         return redirect(reverse(login))
     else:
         request.session.pop('shopify_oauth_state_param', None)
-
+        
     # hash based message authentication code
     myhmac = params.pop('hmac')
     line = '&'.join([
