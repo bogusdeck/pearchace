@@ -144,17 +144,22 @@ async def update_collection_products_order(shop_url, collection_id, products_ord
     api_version = apps.get_app_config('shopify_app').SHOPIFY_API_VERSION
     headers = _get_shopify_headers(access_token)
 
+    # Shopify GraphQL endpoint
     url = f"https://{shop_url}/admin/api/{api_version}/graphql.json"
 
-    product_reorder_input = [{"id": f"gid://shopify/Product/{product_id}"} for product_id in products_order]
+    # Build the moves part of the mutation
+    moves_list = [
+        f'{{id: "gid://shopify/Product/{product_id}", newPosition: {index}}}'
+        for index, product_id in enumerate(products_order)
+    ]
+    moves_str = ", ".join(moves_list)
 
+    # Complete GraphQL mutation
     mutation = f"""
     mutation {{
       collectionReorderProducts(
         id: "gid://shopify/Collection/{collection_id}",
-        moves: [
-          {"".join([f"{{id: \"gid://shopify/Product/{move['id']}\", newPosition: {index}}}" for index, move in enumerate(product_reorder_input)])}
-        ]
+        moves: [{moves_str}]
       ) {{
         job {{
           id
@@ -167,7 +172,7 @@ async def update_collection_products_order(shop_url, collection_id, products_ord
       }}
     }}
     """
-    
+
     async with aiohttp.ClientSession() as session:
         async with session.post(url, json={"query": mutation}, headers=headers) as response:
             if response.status == 200:

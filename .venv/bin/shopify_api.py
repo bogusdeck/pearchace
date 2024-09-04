@@ -1,4 +1,4 @@
-#!C:\Users\XtageLabs\Desktop\pearchace\.venv\Scripts\python.exe
+#!/home/manoj/Downloads/pearchace/.venv/bin/python
 
 import shopify
 import code
