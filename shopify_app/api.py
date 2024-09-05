@@ -188,7 +188,7 @@ async def update_collection_products_order(shop_url, collection_id, products_ord
 
 async def fetch_client_data(shop_url):
     """
-    Fetches the client's shop data from Shopify using the GraphQL API.
+    Fetches the client's shop data from Shopify using the GraphQL API, including currency code and contact email.
 
     Args:
         shop_url (str): The URL of the Shopify store.
@@ -222,6 +222,17 @@ async def fetch_client_data(shop_url):
         }
         createdAt
         timezoneAbbreviation
+        currencyCode
+        contactEmail: email
+        billingAddress {
+          address1
+          address2
+          city
+          province
+          countryCodeV2
+          phone
+          zip
+        }
       }
     }
     """
@@ -230,6 +241,7 @@ async def fetch_client_data(shop_url):
         async with session.post(url, json={"query": query}, headers=headers) as response:
             if response.status == 200:
                 data = await response.json()
+                print(data)
                 shop_data = data.get("data", {}).get("shop", {})
                 return shop_data
             else:

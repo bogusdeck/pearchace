@@ -8,6 +8,10 @@ import hmac, base64, hashlib, binascii, os
 import shopify
 from .models import Client
 from .decorators import shop_login_required
+from .api import fetch_client_data
+import asyncio
+from datetime import datetime
+import pytz
 
 def _new_session(shop_url):
     api_version = apps.get_app_config('shopify_app').SHOPIFY_API_VERSION
@@ -27,6 +31,7 @@ def login(request):
     request.session['shopify_oauth_state_param'] = state
     permission_url = _new_session(shop_url).create_permission_url(scope, redirect_uri, state)
     return redirect(permission_url)
+
 
 def finalize(request):
     """
@@ -49,31 +54,70 @@ def finalize(request):
         session = _new_session(shop_url)
         access_token = session.request_token(request.GET)
 
+        # Fetch client data asynchronously
+        shop_data = asyncio.run(fetch_client_data(shop_url))
+
+        print(shop_data)
+
+        # Access the nested 'shop' object
+        shop = shop_data.get('data', {}).get('shop', {})
+
+        # Access the fields from 'shop'
+        email = shop.get('email', '')
+        name = shop.get('name', '')
+        contact_email = shop.get('contactEmail', '')
+        currency = shop.get('currencyCode', '')
+        timezone = shop.get('timezoneAbbreviation', '')
+        billing_address = shop.get('billingAddress', {})
+        created_at_str = shop.get('createdAt', '')
+
+        # Parsing created_at
+        created_at = None
+        if created_at_str:
+            try:
+                created_at = datetime.strptime(created_at_str, '%Y-%m-%dT%H:%M:%SZ')
+                created_at = created_at.replace(tzinfo=pytz.UTC)  # Ensure UTC timezone
+            except ValueError:
+                created_at = None
+
+        # Get or create the client entry in the database
         client, created = Client.objects.get_or_create(
             shop_name=shop_url,
             defaults={
-                'email': params.get('email', ''),
-                'phone_number': params.get('phone_number', ''),
+                'email': email, 
+                'phone_number': billing_address.get('phone', None),
                 'shop_url': shop_url,
-                'country': params.get('country', ''),
+                'country': billing_address.get('countryCodeV2', ''),
+                'contact_email': contact_email,  # Correctly populated from shop['contactEmail']
+                'currency': currency,
+                'billingAddress': billing_address,
                 'access_token': access_token,
                 'is_active': True,
                 'uninstall_date': None,
                 'trial_used': False,
+                'timezone': timezone,
+                'createdateshopify': created_at
             }
         )
 
-        if not created: 
-            client.email = params.get('email', client.email)
-            client.phone_number = params.get('phone_number', client.phone_number)
-            client.shop_url = shop_url
-            client.country = params.get('country', client.country)
+        # Update the client if it already exists
+        if not created:
+            client.email = email or client.email
+            client.phone_number = billing_address.get('phone', client.phone_number)
+            client.country = billing_address.get('countryCodeV2', client.country)
+            client.contact_email = contact_email or client.contact_email
+            client.currency = currency or client.currency
+            client.billingAddress = billing_address or client.billingAddress
             client.access_token = access_token
             client.is_active = True
             client.uninstall_date = None
-            client.trial_used = False
+            client.shop_name = name or client.shop_name
+            client.timezone = timezone or client.timezone
+            client.createdateshopify = created_at or client.createdateshopify
+
             client.save()
 
+        # Store session info
         request.session['shopify'] = {
             "shop_url": shop_url,
             "access_token": access_token
@@ -84,7 +128,7 @@ def finalize(request):
     except Exception as e:
         return JsonResponse({'error': f'Could not log in: {str(e)}'}, status=500)
 
-
+    
 @shop_login_required
 def logout(request):
     """

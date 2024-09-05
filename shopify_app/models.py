@@ -1,5 +1,7 @@
 from django.db import models
 from django.utils import timezone
+from timezone_field import TimeZoneField
+from django.contrib.postgres.fields import CICharField  
 
 #done
 class Client(models.Model):
@@ -9,6 +11,8 @@ class Client(models.Model):
     phone_number = models.CharField(max_length=20, blank=True, null=True)
     shop_url = models.URLField(max_length=255, blank=True, null=True)
     country = models.CharField(max_length=255, blank=True, null=True)
+    contact_email = models.EmailField(max_length=255, blank=True, null=True) 
+    currency = models.CharField(max_length=10, blank=True, null=True) 
     is_active = models.BooleanField(default=None, null=True)
     access_token = models.TextField(blank=True, null=True)
     trial_used = models.BooleanField(default=False)
@@ -18,8 +22,11 @@ class Client(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     default_algo = models.ForeignKey('SortingAlgorithm', on_delete=models.SET_NULL, null=True, blank=True)
-    member = models.BooleanField(default=False)  
-    
+    member = models.BooleanField(default=False)
+    timezone = models.CharField(default='UTC', max_length=3)  
+    createdateshopify = models.DateTimeField(blank=True, null=True) 
+    billingAddress = models.JSONField(default=dict)
+
     SCHEDULE_FREQUENCY_CHOICES = [
         ('hourly', 'Hourly'),
         ('daily', 'Daily'),
@@ -43,11 +50,9 @@ class Client(models.Model):
         default='all'
     )
 
-
     def __str__(self):
         return self.shop_name
 
-    
 #done
 class SortingPlan(models.Model):
     plan_id = models.AutoField(primary_key=True)
