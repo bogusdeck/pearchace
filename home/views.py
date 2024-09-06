@@ -11,17 +11,97 @@ from django.db.models import F
 from django.utils.decorators import method_decorator
 from django.views import View
 from asgiref.sync import sync_to_async
+from shopify_app.models import Client  # Assuming Client is in the same app
+from datetime import datetime  # Import datetime for handling dates
+import pytz  #
 
 from shopify_app.models import Client
 from shopify_app.api import fetch_collections, fetch_products_by_collection, update_collection_products_order, fetch_client_data
+from asgiref.sync import sync_to_async
+import asyncio
 
 @shop_login_required
 def index(request):
-    return HttpResponse("<h1>Application and user is authenticated Running</h1> <h2>Dashboard</h2>")
+    try:
+        shop_url = request.session.get('shopify', {}).get('shop_url')
+        access_token = request.session.get('shopify', {}).get('access_token')
+
+        if not shop_url or not access_token:
+            return JsonResponse({'error': 'Shopify authentication required'}, status=403)
+
+        # Call the async function using asyncio.run, and sync_to_async ensures it runs in sync context
+        shop_data = asyncio.run(fetch_client_data(shop_url, access_token))
+
+        if not shop_data:
+            return JsonResponse({'error': 'Failed to fetch client data from Shopify'}, status=500)
+
+        # Now update the client data in the database
+        email = shop_data.get('email', '')
+        name = shop_data.get('name', '')
+        contact_email = shop_data.get('contactEmail', '')
+        currency = shop_data.get('currencyCode', '')
+        timezone = shop_data.get('timezoneAbbreviation', '')
+        billing_address = shop_data.get('billingAddress', {})
+        created_at_str = shop_data.get('createdAt', '')
+
+        # Parse created_at
+        created_at = None
+        if created_at_str:
+            try:
+                created_at = datetime.strptime(created_at_str, '%Y-%m-%dT%H:%M:%SZ')
+                created_at = created_at.replace(tzinfo=pytz.UTC)  # Ensure UTC timezone
+            except ValueError:
+                created_at = None
+
+        # Get or create the client entry in the database
+        client, created = Client.objects.get_or_create(
+            shop_name=shop_url,
+            defaults={
+                'email': email, 
+                'phone_number': billing_address.get('phone', None),
+                'shop_url': shop_url,
+                'country': billing_address.get('countryCodeV2', ''),
+                'contact_email': contact_email,
+                'currency': currency,
+                'billingAddress': billing_address,
+                'access_token': access_token,
+                'is_active': True,
+                'uninstall_date': None,
+                'trial_used': False,
+                'timezone': timezone,
+                'createdateshopify': created_at
+            }
+        )
+
+        # Update the client if it already exists
+        if not created:
+            client.email = email or client.email
+            client.phone_number = billing_address.get('phone', client.phone_number)
+            client.country = billing_address.get('countryCodeV2', client.country)
+            client.contact_email = contact_email or client.contact_email
+            client.currency = currency or client.currency
+            client.billingAddress = billing_address or client.billingAddress
+            client.access_token = access_token
+            client.is_active = True
+            client.uninstall_date = None
+            client.shop_name = name or client.shop_name
+            client.timezone = timezone or client.timezone
+            client.createdateshopify = created_at or client.createdateshopify
+
+            client.save()
+
+        return JsonResponse({
+            'success': 'Client info fetched and stored successfully',
+            'client_data': shop_data
+        })
+
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
 
 @csrf_protect  
 @shop_login_required
-@require_GET  # only get requests are allowed (for now)
+@require_GET  
 def get_collections(request):
     #api returns all collection 
     shop_url = request.session.get('shopify', {}).get('shop_url')  

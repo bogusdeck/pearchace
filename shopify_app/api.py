@@ -4,6 +4,8 @@ import json
 import shopify
 from django.apps import apps
 from .models import Client
+from datetime import datetime
+import pytz
 
 # Utility function to create headers for Shopify GraphQL requests
 def _get_shopify_headers(access_token):
@@ -250,22 +252,17 @@ async def update_collection_products_order(shop_url, collection_id, products_ord
 
 
 
-async def fetch_client_data(shop_url):
+async def fetch_client_data(shop_url, access_token):
     """
-    Fetches the client's shop data from Shopify using the GraphQL API, including currency code and contact email,
-    and returns a flattened dictionary of the shop's details.
+    Fetches the client's shop data from Shopify using the GraphQL API.
 
     Args:
         shop_url (str): The URL of the Shopify store.
+        access_token (str): The access token for the Shopify store.
 
     Returns:
-        dict: A flattened dictionary containing the client's shop data or an empty dictionary if an error occurs.
+        dict: A dictionary containing the client's shop data or an empty dictionary if an error occurs.
     """
-    client = await _get_client(shop_url)
-    if not client:
-        return {}
-
-    access_token = client.access_token
     api_version = apps.get_app_config('shopify_app').SHOPIFY_API_VERSION
     headers = _get_shopify_headers(access_token)
 
@@ -306,30 +303,7 @@ async def fetch_client_data(shop_url):
         async with session.post(url, json={"query": query}, headers=headers) as response:
             if response.status == 200:
                 data = await response.json()
-                shop_data = data.get("data", {}).get("shop", {})
-                
-                flattened_data = {
-                    "id": shop_data.get("id"),
-                    "name": shop_data.get("name"),
-                    "email": shop_data.get("email"),
-                    "primary_domain_url": shop_data.get("primaryDomain", {}).get("url"),
-                    "primary_domain_host": shop_data.get("primaryDomain", {}).get("host"),
-                    "myshopify_domain": shop_data.get("myshopifyDomain"),
-                    "plan": shop_data.get("plan", {}).get("displayName"),
-                    "created_at": shop_data.get("createdAt"),
-                    "timezone_abbreviation": shop_data.get("timezoneAbbreviation"),
-                    "currency_code": shop_data.get("currencyCode"),
-                    "contact_email": shop_data.get("contactEmail"),
-                    "billing_address1": shop_data.get("billingAddress", {}).get("address1"),
-                    "billing_address2": shop_data.get("billingAddress", {}).get("address2"),
-                    "billing_city": shop_data.get("billingAddress", {}).get("city"),
-                    "billing_province": shop_data.get("billingAddress", {}).get("province"),
-                    "billing_country": shop_data.get("billingAddress", {}).get("countryCodeV2"),
-                    "billing_phone": shop_data.get("billingAddress", {}).get("phone"),
-                    "billing_zip": shop_data.get("billingAddress", {}).get("zip"),
-                }
-                
-                return flattened_data
+                return data.get("data", {}).get("shop", {})
             else:
                 print(f"Error fetching shop data: {response.status} - {await response.text()}")
                 return {}
