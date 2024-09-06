@@ -7,14 +7,12 @@ from .models import Client
 from datetime import datetime
 import pytz
 
-# Utility function to create headers for Shopify GraphQL requests
 def _get_shopify_headers(access_token):
     return {
         "Content-Type": "application/json",
         "X-Shopify-Access-Token": access_token
     }
 
-# Async function to fetch collections
 async def fetch_collections(shop_url):
     """
     Fetches all collections from a Shopify store using the GraphQL API.
@@ -57,11 +55,9 @@ async def fetch_collections(shop_url):
                 collections = data.get("data", {}).get("collections", {}).get("edges", [])
                 return [collection['node'] for collection in collections]
             else:
-                # Log error or handle it accordingly
                 print(f"Error fetching collections: {response.status} - {await response.text()}")
                 return []
 
-# Async function to fetch products of a specific collection
 async def fetch_products_by_collection(shop_url, collection_id):
     """
     Fetches all products from a specific collection in a Shopify store using the GraphQL API.
@@ -126,81 +122,21 @@ async def _get_client(shop_url):
         return None
 
 
-async def update_collection_products_order(shop_url, collection_id, products_order):
-    """
-    Updates the display order of products in a specific collection in a Shopify store using the GraphQL API.
-
-    Args:
-        shop_url (str): The URL of the Shopify store.
-        collection_id (str): The ID of the collection to update.
-        products_order (list): A list of product IDs in the desired display order.
-
-    Returns:
-        bool: True if the update was successful, False otherwise.
-    """
-    client = await _get_client(shop_url)
-    if not client:
-        return False
-
-    access_token = client.access_token
-    api_version = apps.get_app_config('shopify_app').SHOPIFY_API_VERSION
-    headers = _get_shopify_headers(access_token)
-
-    # Shopify GraphQL endpoint
-    url = f"https://{shop_url}/admin/api/{api_version}/graphql.json"
-
-    # Build the moves part of the mutation
-    moves_list = [
-        f'{{id: "gid://shopify/Product/{product_id}", newPosition: {index}}}'
-        for index, product_id in enumerate(products_order)
-    ]
-    moves_str = ", ".join(moves_list)
-
-    # Complete GraphQL mutation
-    mutation = f"""
-    mutation {{
-      collectionReorderProducts(
-        id: "gid://shopify/Collection/{collection_id}",
-        moves: [{moves_str}]
-      ) {{
-        job {{
-          id
-          status
-        }}
-        userErrors {{
-          field
-          message
-        }}
-      }}
-    }}
-    """
-
-    async with aiohttp.ClientSession() as session:
-        async with session.post(url, json={"query": mutation}, headers=headers) as response:
-            if response.status == 200:
-                data = await response.json()
-                errors = data.get("data", {}).get("collectionReorderProducts", {}).get("userErrors", [])
-                if errors:
-                    print(f"Errors encountered: {errors}")
-                    return False
-                return True
-            else:
-                print(f"Error updating products order: {response.status} - {await response.text()}")
-                return False
-
-# async def fetch_client_data(shop_url):
+# async def update_collection_products_order(shop_url, collection_id, products_order):
 #     """
-#     Fetches the client's shop data from Shopify using the GraphQL API, including currency code and contact email.
+#     Updates the display order of products in a specific collection in a Shopify store using the GraphQL API.
 
 #     Args:
 #         shop_url (str): The URL of the Shopify store.
+#         collection_id (str): The ID of the collection to update.
+#         products_order (list): A list of product IDs in the desired display order.
 
 #     Returns:
-#         dict: A dictionary containing the client's shop data or an empty dictionary if an error occurs.
+#         bool: True if the update was successful, False otherwise.
 #     """
 #     client = await _get_client(shop_url)
 #     if not client:
-#         return {}
+#         return False
 
 #     access_token = client.access_token
 #     api_version = apps.get_app_config('shopify_app').SHOPIFY_API_VERSION
@@ -208,47 +144,42 @@ async def update_collection_products_order(shop_url, collection_id, products_ord
 
 #     url = f"https://{shop_url}/admin/api/{api_version}/graphql.json"
 
-#     query = """
-#     {
-#       shop {
-#         id
-#         name
-#         email
-#         primaryDomain {
-#           url
-#           host
-#         }
-#         myshopifyDomain
-#         plan {
-#           displayName
-#         }
-#         createdAt
-#         timezoneAbbreviation
-#         currencyCode
-#         contactEmail: email
-#         billingAddress {
-#           address1
-#           address2
-#           city
-#           province
-#           countryCodeV2
-#           phone
-#           zip
-#         }
-#       }
-#     }
+#     moves_list = [
+#         f'{{id: "gid://shopify/Product/{product_id}", newPosition: {index}}}'
+#         for index, product_id in enumerate(products_order)
+#     ]
+#     moves_str = ", ".join(moves_list)
+
+#     mutation = f"""
+#     mutation {{
+#       collectionReorderProducts(
+#         id: "gid://shopify/Collection/{collection_id}",
+#         moves: [{moves_str}]
+#       ) {{
+#         job {{
+#           id
+#           status
+#         }}
+#         userErrors {{
+#           field
+#           message
+#         }}
+#       }}
+#     }}
 #     """
-    
+
 #     async with aiohttp.ClientSession() as session:
-#         async with session.post(url, json={"query": query}, headers=headers) as response:
+#         async with session.post(url, json={"query": mutation}, headers=headers) as response:
 #             if response.status == 200:
 #                 data = await response.json()
-#                 print(data)
-#                 shop_data = data.get("data", {}).get("shop", {})
-#                 return shop_data
+#                 errors = data.get("data", {}).get("collectionReorderProducts", {}).get("userErrors", [])
+#                 if errors:
+#                     print(f"Errors encountered: {errors}")
+#                     return False
+#                 return True
 #             else:
-#                 print(f"Error fetching shop data: {response.status} - {await response.text()}")
-#                 return {}
+#                 print(f"Error updating products order: {response.status} - {await response.text()}")
+#                 return False
 
 
 
@@ -307,3 +238,58 @@ async def fetch_client_data(shop_url, access_token):
             else:
                 print(f"Error fetching shop data: {response.status} - {await response.text()}")
                 return {}
+
+async def update_collection_products_order(shop_url, collection_id, sorted_product_ids):
+    """
+    Updates the product order of a collection in Shopify.
+
+    Args:
+        shop_url (str): The Shopify store URL.
+        collection_id (str): The ID of the collection to update.
+        sorted_product_ids (list): A list of product IDs in the desired order.
+
+    Returns:
+        bool: True if the update is successful, False otherwise.
+    """
+    try:
+        api_version = apps.get_app_config('shopify_app').SHOPIFY_API_VERSION
+        access_token = request.session.get('shopify', {}).get('access_token')
+        headers = _get_shopify_headers(access_token)
+        url = f"https://{shop_url}/admin/api/{api_version}/graphql.json"
+
+        # GraphQL mutation for updating collection order
+        mutation = """
+        mutation updateProductOrder($collectionId: ID!, $productIds: [ID!]!) {
+            collectionReorderProducts(collectionId: $collectionId, moves: {
+                newPosition: 1,
+                productId: $productIds
+            }) {
+                userErrors {
+                    field
+                    message
+                }
+            }
+        }
+        """
+
+        variables = {
+            "collectionId": f"gid://shopify/Collection/{collection_id}",
+            "productIds": [f"gid://shopify/Product/{pid}" for pid in sorted_product_ids]
+        }
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json={"query": mutation, "variables": variables}, headers=headers) as response:
+                if response.status == 200:
+                    result = await response.json()
+                    errors = result.get('data', {}).get('collectionReorderProducts', {}).get('userErrors', [])
+                    if not errors:
+                        return True
+                    else:
+                        print(f"User errors: {errors}")
+                else:
+                    print(f"Failed to reorder products: {response.status} - {await response.text()}")
+        return False
+
+    except Exception as e:
+        print(f"Exception during product order update: {str(e)}")
+        return False

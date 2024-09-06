@@ -11,14 +11,34 @@ from django.db.models import F
 from django.utils.decorators import method_decorator
 from django.views import View
 from asgiref.sync import sync_to_async
-from shopify_app.models import Client  # Assuming Client is in the same app
-from datetime import datetime  # Import datetime for handling dates
-import pytz  #
+from shopify_app.models import Client  
+from datetime import datetime  
+import pytz  
 
 from shopify_app.models import Client
 from shopify_app.api import fetch_collections, fetch_products_by_collection, update_collection_products_order, fetch_client_data
 from asgiref.sync import sync_to_async
 import asyncio
+from .strategies import (
+    promote_new, 
+    promote_high_revenue_products, 
+    promote_high_inventory_products, 
+    bestsellers_high_variant_availability, 
+    promote_high_variant_availability, 
+    clearance_sale, 
+    promote_high_revenue_new_products
+)
+
+# Map algo_id to sorting functions
+ALGO_ID_TO_FUNCTION = {
+    '001': promote_new,
+    '002': promote_high_revenue_products,
+    '003': promote_high_inventory_products,
+    '004': bestsellers_high_variant_availability,
+    '005': promote_high_variant_availability,
+    '006': clearance_sale,
+    '007': promote_high_revenue_new_products
+}
 
 @shop_login_required
 def index(request):
@@ -29,13 +49,11 @@ def index(request):
         if not shop_url or not access_token:
             return JsonResponse({'error': 'Shopify authentication required'}, status=403)
 
-        # Call the async function using asyncio.run, and sync_to_async ensures it runs in sync context
         shop_data = asyncio.run(fetch_client_data(shop_url, access_token))
 
         if not shop_data:
             return JsonResponse({'error': 'Failed to fetch client data from Shopify'}, status=500)
 
-        # Now update the client data in the database
         email = shop_data.get('email', '')
         name = shop_data.get('name', '')
         contact_email = shop_data.get('contactEmail', '')
@@ -44,16 +62,14 @@ def index(request):
         billing_address = shop_data.get('billingAddress', {})
         created_at_str = shop_data.get('createdAt', '')
 
-        # Parse created_at
         created_at = None
         if created_at_str:
             try:
                 created_at = datetime.strptime(created_at_str, '%Y-%m-%dT%H:%M:%SZ')
-                created_at = created_at.replace(tzinfo=pytz.UTC)  # Ensure UTC timezone
+                created_at = created_at.replace(tzinfo=pytz.UTC)  
             except ValueError:
                 created_at = None
 
-        # Get or create the client entry in the database
         client, created = Client.objects.get_or_create(
             shop_name=shop_url,
             defaults={
@@ -73,7 +89,6 @@ def index(request):
             }
         )
 
-        # Update the client if it already exists
         if not created:
             client.email = email or client.email
             client.phone_number = billing_address.get('phone', client.phone_number)
@@ -103,7 +118,6 @@ def index(request):
 @shop_login_required
 @require_GET  
 def get_collections(request):
-    #api returns all collection 
     shop_url = request.session.get('shopify', {}).get('shop_url')  
 
     if not shop_url:
@@ -120,7 +134,6 @@ def get_collections(request):
 @shop_login_required
 @require_GET
 def get_products(request):
-    # api returns all products of a collection 
     shop_url = request.session.get('shopify', {}).get('shop_url')  
     collection_id = request.GET.get('collection_id')  
 
@@ -131,7 +144,6 @@ def get_products(request):
         return JsonResponse({'error': 'Collection ID is required'}, status=400)
 
     try:
-        # Fetch products asynchronously
         products = asyncio.run(fetch_products_by_collection(shop_url, collection_id))
         return JsonResponse({'products': products}, status=200)
     except Exception as e:
@@ -143,28 +155,43 @@ def get_products(request):
 @require_POST
 def update_product_order(request):
     """
-    API endpoint to update the order of products in a collection.
+    API endpoint to update the order of products in a collection based on a sorting algorithm.
 
     Returns:
         JsonResponse: A JSON response indicating success or failure.
     """
     shop_url = request.session.get('shopify', {}).get('shop_url')  
     collection_id = request.POST.get('collection_id')  
-    
-    #need to update this later --> sorted algo give this product order
-    products_order = request.POST.getlist('products_order[]')  
+    algo_id = request.POST.get('algo_id')  # Get algo_id from the request
 
     if not shop_url:
         return JsonResponse({'error': 'Shop URL not found in session'}, status=400)
     
     if not collection_id:
         return JsonResponse({'error': 'Collection ID is required'}, status=400)
-
-    if not products_order:
-        return JsonResponse({'error': 'Products order is required'}, status=400)
+    
+    if not algo_id:
+        return JsonResponse({'error': 'Algorithm ID is required'}, status=400)
+    
+    # Ensure the algo_id is valid and maps to a function
+    sort_function = ALGO_ID_TO_FUNCTION.get(algo_id)
+    if not sort_function:
+        return JsonResponse({'error': 'Invalid algorithm ID provided'}, status=400)
 
     try:
-        success = asyncio.run(update_collection_products_order(shop_url, collection_id, products_order))
+        # Fetch the products of the collection (This function should fetch the collection's products)
+        products = asyncio.run(fetch_collection_products(shop_url, collection_id))
+        if not products:
+            return JsonResponse({'error': 'Failed to fetch products for the collection'}, status=500)
+
+        # Apply the sorting algorithm
+        sorted_products = sort_function(products)
+
+        # Extract product IDs in sorted order
+        sorted_product_ids = [p['id'] for p in sorted_products]
+
+        # Update the product order in Shopify
+        success = asyncio.run(update_collection_products_order(shop_url, collection_id, sorted_product_ids))
         if success:
             return JsonResponse({'success': True}, status=200)
         else:
@@ -188,7 +215,6 @@ def get_client_info(request):
         return JsonResponse({'error': 'Shop URL not found in session'}, status=400)
 
     try:
-        # Fetch the client based on the shop_url synchronously
         client = Client.objects.get(shop_url=shop_url)
         
         client_data = {
@@ -227,7 +253,6 @@ def get_shopify_client_data(request):
         return JsonResponse({'error': 'Shop URL not found in session'}, status=400)
 
     try:
-        # Fetch the client's shop data
         shop_data = asyncio.run(fetch_client_data(shop_url))
         if shop_data:
             return JsonResponse({'shop_data': shop_data}, status=200)
