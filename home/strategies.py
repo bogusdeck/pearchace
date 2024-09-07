@@ -44,4 +44,13 @@ def promote_high_revenue_new_products(products):
     new_products = [p for p in products if p['listed_date'] >= one_week_ago]
     return sorted(new_products, key=lambda x: x['revenue'], reverse=True)
 
+def sort_alphabetically(products):
+    # Ensure products is a list and contains dictionaries
+    if not isinstance(products, list) or not all(isinstance(p, dict) for p in products):
+        raise ValueError("Expected a list of dictionaries for products")
 
+    # Sort products by 'title', case-insensitively
+    sorted_products = sorted(products, key=lambda x: x['title'].lower())
+
+    # Return sorted product IDs directly
+    return [p['id'] for p in sorted_products]
