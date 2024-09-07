@@ -25,7 +25,6 @@ INSTALLED_APPS = [
     'shopify_app.apps.ShopifyAppConfig',
     'home.apps.HomeConfig',
     'rest_framework',
-    'drf_yasg',
 ]
 
 MIDDLEWARE = [
