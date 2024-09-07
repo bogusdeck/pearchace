@@ -162,7 +162,7 @@ def update_product_order(request):
     """
     shop_url = request.session.get('shopify', {}).get('shop_url')  
     collection_id = request.POST.get('collection_id')  
-    algo_id = request.POST.get('algo_id')  # Get algo_id from the request
+    algo_id = request.POST.get('algo_id')  
 
     if not shop_url:
         return JsonResponse({'error': 'Shop URL not found in session'}, status=400)
@@ -173,24 +173,20 @@ def update_product_order(request):
     if not algo_id:
         return JsonResponse({'error': 'Algorithm ID is required'}, status=400)
     
-    # Ensure the algo_id is valid and maps to a function
+    
     sort_function = ALGO_ID_TO_FUNCTION.get(algo_id)
     if not sort_function:
         return JsonResponse({'error': 'Invalid algorithm ID provided'}, status=400)
 
     try:
-        # Fetch the products of the collection (This function should fetch the collection's products)
         products = asyncio.run(fetch_collection_products(shop_url, collection_id))
         if not products:
             return JsonResponse({'error': 'Failed to fetch products for the collection'}, status=500)
 
-        # Apply the sorting algorithm
         sorted_products = sort_function(products)
 
-        # Extract product IDs in sorted order
         sorted_product_ids = [p['id'] for p in sorted_products]
 
-        # Update the product order in Shopify
         success = asyncio.run(update_collection_products_order(shop_url, collection_id, sorted_product_ids))
         if success:
             return JsonResponse({'success': True}, status=200)
