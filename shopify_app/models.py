@@ -6,7 +6,7 @@ from django.contrib.postgres.fields import CICharField
 #done
 class Client(models.Model):
     client_id = models.BigAutoField(primary_key=True)
-    shop_name = models.CharField(max_length=255)
+    shop_name = models.CharField(max_length=255, unique=True)
     email = models.EmailField(max_length=255)
     phone_number = models.CharField(max_length=20, blank=True, null=True)
     shop_url = models.URLField(max_length=255, blank=True, null=True)

@@ -61,12 +61,12 @@ def index(request):
             except ValueError:
                 created_at = None
 
-        client, created = Client.objects.get_or_create(
+        # Use update_or_create to ensure no duplicate clients are created
+        client, created = Client.objects.update_or_create(
             shop_name=shop_url,
             defaults={
                 'email': email, 
                 'phone_number': billing_address.get('phone', None),
-                'shop_url': shop_url,
                 'country': billing_address.get('countryCodeV2', ''),
                 'contact_email': contact_email,
                 'currency': currency,
@@ -80,22 +80,6 @@ def index(request):
             }
         )
 
-        if not created:
-            client.email = email or client.email
-            client.phone_number = billing_address.get('phone', client.phone_number)
-            client.country = billing_address.get('countryCodeV2', client.country)
-            client.contact_email = contact_email or client.contact_email
-            client.currency = currency or client.currency
-            client.billingAddress = billing_address or client.billingAddress
-            client.access_token = access_token
-            client.is_active = True
-            client.uninstall_date = None
-            client.shop_name = name or client.shop_name
-            client.timezone = timezone or client.timezone
-            client.createdateshopify = created_at or client.createdateshopify
-
-            client.save()
-
         return JsonResponse({
             'success': 'Client info fetched and stored successfully',
             'client_data': shop_data
@@ -103,7 +87,7 @@ def index(request):
 
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
-
+        
 @shop_login_required
 @api_view(['GET'])
 @csrf_protect
@@ -146,7 +130,7 @@ def update_product_order(request):
     collection_id = request.data.get('collection_id')
     algo_id = request.data.get('algo_id')
     access_token = request.session.get('shopify', {}).get('access_token')
-
+    print(f"Access token: {access_token}")
 
     if not shop_url:
         return Response({'error': 'Shop URL not found in session'}, status=status.HTTP_400_BAD_REQUEST)
