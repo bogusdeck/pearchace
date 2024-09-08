@@ -87,7 +87,7 @@ def index(request):
 
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
-        
+
 @shop_login_required
 @api_view(['GET'])
 @csrf_protect
@@ -155,7 +155,7 @@ def update_product_order(request):
             return Response({'error': 'Failed to sort products'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         print(sorted_product_ids)
 
-        success = update_collection_products_order(shop_url, collection_id, sorted_product_ids, access_token)
+        success = update_collection_products_order(shop_url, access_token, collection_id, sorted_product_ids)
         print("\n\n",success)
         if success:
             return Response({'success': True}, status=status.HTTP_200_OK)

@@ -244,10 +244,13 @@ def update_collection_products_order(shop_url, access_token, collection_id, sort
         headers = _get_shopify_headers(access_token)
         url = f"https://{shop_url}/admin/api/{api_version}/graphql.json"
 
+        # Convert collection_id to global ID
+        collection_global_id = f"gid://shopify/Collection/{collection_id}"
+
         # GraphQL mutation for updating collection order
         mutation = """
-        mutation updateProductOrder($moves: [MoveInput!]!) {
-            collectionReorderProducts(moves: $moves) {
+        mutation updateProductOrder($id: ID!, $moves: [MoveInput!]!) {
+            collectionReorderProducts(id: $id, moves: $moves) {
                 userErrors {
                     field
                     message
@@ -266,13 +269,13 @@ def update_collection_products_order(shop_url, access_token, collection_id, sort
         ]
 
         variables = {
+            "id": collection_global_id,  # Pass the global collection ID here
             "moves": moves
         }
 
         response = requests.post(url, json={"query": mutation, "variables": variables}, headers=headers)
         if response.status_code == 200:
             result = response.json()
-            print(f"Response JSON: {result}")  # Debugging: Print the response JSON
             errors = result.get('data', {}).get('collectionReorderProducts', {}).get('userErrors', [])
             if not errors:
                 return True
