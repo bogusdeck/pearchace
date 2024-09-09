@@ -182,6 +182,9 @@ def get_client_info(request):
             'phone_number': client.phone_number,
             'shop_url': client.shop_url,
             'country': client.country,
+            'contact_email': client.contact_email,
+            'currency': client.currency,
+            'billingAddress': client.billingAddress,
             'is_active': client.is_active,
             'access_token': client.access_token,
             'trial_used': client.trial_used,
@@ -189,13 +192,13 @@ def get_client_info(request):
             'uninstall_date': client.uninstall_date,
             'created_at': client.created_at,
             'updated_at': client.updated_at,
-            'default_algo': client.default_algo.name if client.default_algo else None,
+            'timezone': client.timezone,
+            'createdateshopify': client.createdateshopify,
             'schedule_frequency': client.schedule_frequency,
             'stock_location': client.stock_location,
-            'member': client.member,
         }
 
-        return Response({'client': client_data}, status=status.HTTP_200_OK)
+        return Response({'client_data': client_data}, status=status.HTTP_200_OK)
 
     except Client.DoesNotExist:
         return Response({'error': 'Client not found'}, status=status.HTTP_404_NOT_FOUND)
