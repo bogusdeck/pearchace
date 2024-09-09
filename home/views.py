@@ -5,8 +5,9 @@ from shopify_app.decorators import shop_login_required
 from django.http import JsonResponse
 from datetime import datetime
 import pytz
+import shopify
 from django.views.decorators.csrf import csrf_protect
-from shopify_app.models import Client
+from shopify_app.models import Client, Usage, Subscription, SortingPlan
 from shopify_app.api import fetch_collections, fetch_products_by_collection, update_collection_products_order, fetch_client_data
 from .strategies import (
     promote_new, 
@@ -18,6 +19,8 @@ from .strategies import (
     promote_high_revenue_new_products,
     sort_alphabetically
 )
+
+from django.shortcuts import get_object_or_404
 
 # Mapping algorithm IDs to their corresponding functions
 ALGO_ID_TO_FUNCTION = {
@@ -205,6 +208,7 @@ def get_client_info(request):
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
 @shop_login_required
 @api_view(['GET'])
 def get_shopify_client_data(request):
@@ -223,7 +227,77 @@ def get_shopify_client_data(request):
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+@shop_login_required
+@require_GET
+def available_sorts(request):
+    shop_url = request.session.get('shopify', {}).get('shop_url')
 
-# @shop_login_required
-# @api_view(['GET'])
-# def get_available_sort(request):
+    if not shop_url:
+        return Response({'error': 'Shop URL not found in session'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        client = Client.objects.get(shop_url=shop_url)
+
+        usage = Usage.objects.get(client=client)
+
+        subscription = Subscription.objects.get(id=usage.subscription_id)
+
+        sorting_plan = SortingPlan.objects.get(id=subscription.plan_id)
+
+        sort_limit = sorting_plan.sort_limit
+
+        available_sorts = sort_limit - usage.sort_count
+
+        return JsonResponse({
+            "available_sorts": available_sorts,
+            "sort_limit": sort_limit,
+            "used_sorts": usage.sort_count
+        })
+
+    except Usage.DoesNotExist:
+        return JsonResponse({"error": "Usage record not found"}, status=404)
+    
+    except Subscription.DoesNotExist:
+        return JsonResponse({"error": "Subscription record not found"}, status=404)
+    
+    except SortingPlan.DoesNotExist:
+        return JsonResponse({"error": "Sorting plan record not found"}, status=404)
+
+
+@shop_login_required
+@require_GET
+def last_active_collections(request):
+    shop_url = request.session.get('shopify', {}).get('shop_url')
+
+    if not shop_url:
+        return Response({'error': 'Shop URL not found in session'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        client = Client.objects.get(shop_url=shop_url)
+        collections = CollectionSort.objects.filter(client=client, status=True).order_by('-sortdate')[:5]
+
+        collection_data = []
+        for collection_sort in collection_sorts:
+            algo_name = SortingAlgorithm.objects.get(algo_id=collection_sort.algo_id).name
+            collection_name = ClientCollections.objects.get(collection_id=collection_sort.collection_id).collection_name
+            
+            collections_data.append({
+                'collection_id': collection_sort.collection_id,
+                'collection_name': collection_name,
+                'product_count': collection_sort.products_count,
+                'sort_date': collection_sort.sort_date,
+                'algo_name': algo_name
+            })
+
+        return Response({'collections': collections_data}, status=status.HTTP_200_OK)
+
+    except Client.DoesNotExist:
+            return Response({'error': 'Client not found'}, status=status.HTTP_404_NOT_FOUND)
+    except CollectionSort.DoesNotExist:
+        return Response({'error': 'No collections found'}, status=status.HTTP_404_NOT_FOUND)
+    except SortingAlgorithm.DoesNotExist:
+        return Response({'error': 'Sorting algorithm not found'}, status=status.HTTP_404_NOT_FOUND)
+    except ClientCollections.DoesNotExist:
+        return Response({'error': 'Client collections not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

@@ -90,20 +90,25 @@ class CollectionSort(models.Model):
     algo = models.ForeignKey('SortingAlgorithm', on_delete=models.CASCADE)
     parameters_used = models.JSONField(default=dict)
     sort_date = models.DateTimeField()
-    products_count = models.IntegerField() #no need 
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
-    status = models.BooleanField(default=True)
     
-
-    set_criteria = models.JSONField(default=dict)  
-    actions = models.JSONField(default=dict)  
-    review_period = models.CharField(max_length=255, blank=True, null=True)
-    
-    pinned_products = models.JSONField(default=list)  
-
     def __str__(self):
         return f"Collection Sort {self.sort_id} for {self.client.shop_name} on {self.sort_date}"
+
+class ClientCollections(models.Model):
+    collectionid = models.CharField(max_length=255, unique=True)  
+    client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name='collections')  
+    collection_name = models.CharField(max_length=255)  
+    status = models.BooleanField(default=True)  
+    created_at = models.DateTimeField(auto_now_add=True)  
+    products_count = models.IntegerField(default=0)  
+    sort_date = models.DateTimeField(null=True, blank=True)  
+    pinned_products = models.JSONField(blank=True, null=True)  
+
+    def __str__(self):
+        return f"{self.collection_name} (ID: {self.collectionid}) for {self.client.shop_name}"
+
 
 #done
 class Subscription(models.Model):

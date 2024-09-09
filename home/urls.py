@@ -8,5 +8,7 @@ urlpatterns = [
     path('api/products/', views.get_products, name='product_list_api'),
     path('api/update-products-order/', views.update_product_order, name="update_products_order_api"),
     path('api/client-info/', views.get_client_info, name='get_client_info'),
-    path('api/shop-info/', views.get_shopify_client_data, name="get_shopify_client_info")
+    path('api/shop-info/', views.get_shopify_client_data, name="get_shopify_client_info"),
+    path('api/available-sorts/', views.available_sorts, name='available_sorts'),
+    path('api/last-active-collections/', views.last_active_collections, name='last_active_collections'),    
 ]
