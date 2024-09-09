@@ -61,7 +61,7 @@ def index(request):
             except ValueError:
                 created_at = None
 
-        # Use update_or_create to ensure no duplicate clients are created
+
         client, created = Client.objects.update_or_create(
             shop_name=shop_url,
             defaults={
@@ -219,3 +219,8 @@ def get_shopify_client_data(request):
 
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# @shop_login_required
+# @api_view(['GET'])
+# def get_available_sort(request):

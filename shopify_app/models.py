@@ -20,7 +20,7 @@ class Client(models.Model):
     uninstall_date = models.DateTimeField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-
+    # subscription_status = models.BooleanField(max_length=50, default="inactive")
     default_algo = models.ForeignKey('SortingAlgorithm', on_delete=models.SET_NULL, null=True, blank=True)
     member = models.BooleanField(default=False)
     timezone = models.CharField(default='UTC', max_length=3)  
@@ -61,7 +61,6 @@ class SortingPlan(models.Model):
     addon_sorts_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
-    
     cost_month = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     cost_annual = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     sort_limit = models.IntegerField(null=True, blank=True)
@@ -91,14 +90,16 @@ class CollectionSort(models.Model):
     algo = models.ForeignKey('SortingAlgorithm', on_delete=models.CASCADE)
     parameters_used = models.JSONField(default=dict)
     sort_date = models.DateTimeField()
-    products_count = models.IntegerField()
+    products_count = models.IntegerField() #no need 
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
-    
     status = models.BooleanField(default=True)
+    
+
     set_criteria = models.JSONField(default=dict)  
     actions = models.JSONField(default=dict)  
     review_period = models.CharField(max_length=255, blank=True, null=True)
+    
     pinned_products = models.JSONField(default=list)  
 
     def __str__(self):
