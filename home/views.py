@@ -109,24 +109,24 @@ def index(request):
 #     except Exception as e:
 #         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-@shop_login_required
-@api_view(['GET'])
-@csrf_protect
-def get_products(request):
-    shop_url = request.session.get('shopify', {}).get('shop_url')
-    collection_id = request.GET.get('collection_id')
+# @shop_login_required
+# @api_view(['GET'])
+# @csrf_protect
+# def get_products(request):
+#     shop_url = request.session.get('shopify', {}).get('shop_url')
+#     collection_id = request.GET.get('collection_id')
 
-    if not shop_url:
-        return Response({'error': 'Shop URL not found in session'}, status=status.HTTP_400_BAD_REQUEST)
+#     if not shop_url:
+#         return Response({'error': 'Shop URL not found in session'}, status=status.HTTP_400_BAD_REQUEST)
 
-    if not collection_id:
-        return Response({'error': 'Collection ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+#     if not collection_id:
+#         return Response({'error': 'Collection ID is required'}, status=status.HTTP_400_BAD_REQUEST)
 
-    try:
-        products = fetch_products_by_collection(shop_url, collection_id)
-        return Response({'products': products}, status=status.HTTP_200_OK)
-    except Exception as e:
-        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+#     try:
+#         products = fetch_products_by_collection(shop_url, collection_id)
+#         return Response({'products': products}, status=status.HTTP_200_OK)
+#     except Exception as e:
+#         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @shop_login_required
 @api_view(['POST'])
@@ -581,6 +581,143 @@ def get_and_update_collections(request):
 
     except Client.DoesNotExist:
         return Response({'error': 'Client not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+
+@shop_login_required
+@api_view(['POST'])  
+@csrf_protect
+def get_products(request):
+    shop_url = request.session.get('shopify', {}).get('shop_url')
+    collection_id = request.data.get('collection_id')  
+
+    if not shop_url:
+        return Response({'error': 'Shop URL not found in session'}, status=status.HTTP_400_BAD_REQUEST)
+    if not collection_id:
+        return Response({'error': 'Collection ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        products = fetch_products_by_collection(shop_url, collection_id)
+        try:
+            client_collection = ClientCollections.objects.get(collectionid=collection_id)
+        except ClientCollections.DoesNotExist:
+            return Response({'error': 'Collection not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        pinned_products = client_collection.pinned_products or []
+
+
+        products_filtered = [product for product in products if product['id'] not in pinned_products]
+
+        return Response({
+            'products': products_filtered,
+            'pinned_products': pinned_products
+        }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@shop_login_required
+@api_view(['POST'])
+@csrf_protect
+def update_pinned_products(request):
+    collection_id = request.data.get('collection_id')
+    pinned_products = request.data.get('pinned_products', [])
+
+    if not collection_id:
+        return Response({'error': 'Collection ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if not isinstance(pinned_products, list):
+        return Response({'error': 'Pinned products should be a list of product IDs'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        
+        client_collection = ClientCollections.objects.get(collectionid=collection_id)
+
+        client_collection.pinned_products = pinned_products
+        client_collection.save()
+
+        return Response({
+            'message': 'Pinned products updated successfully',
+            'pinned_products': client_collection.pinned_products
+        }, status=status.HTTP_200_OK)
+
+    except ClientCollections.DoesNotExist:
+        return Response({'error': 'Collection not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+
+@shop_login_required
+@api_view(['GET'])
+def get_sorting_algorithms(request):
+    # GET /api/get-sorting-algorithms/?client_id=1
+    client_id = request.GET.get('client_id')
+
+    if not client_id:
+        return Response({'error': 'Client ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        client = Client.objects.get(id=client_id)
+        default_algo = client.default_algo
+
+        algorithms = SortingAlgorithm.objects.all()
+
+        algo_data = []
+
+        for algo in algorithms:
+            collections_count = ClientCollections.objects.filter(algo_id=algo.algo_id).count()
+
+            algo_data.append({
+                'algo_id': algo.algo_id,
+                'name': algo.name,
+                'description': algo.description,
+                'default_parameters': algo.default_parameters,
+                'collections_using_algo': collections_count
+            })
+
+        return Response({
+            'default_algo': default_algo,
+            'algorithms': algo_data
+        }, status=status.HTTP_200_OK)
+
+    except Client.DoesNotExist:
+        return Response({'error': 'Client not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+
+@shop_login_required
+@api_view(['POST'])
+def update_default_algo(request):
+    client_id = request.data.get('client_id')
+    algo_id = request.data.get('algo_id')
+
+    if not client_id or not algo_id:
+        return Response({'error': 'Client ID and Algorithm ID are required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+
+        client = Client.objects.get(id=client_id)
+
+        algo = SortingAlgorithm.objects.get(algo_id=algo_id)
+
+        client.default_algo = algo_id
+        client.save()
+
+        return Response({
+            'message': 'Default algorithm updated successfully',
+            'default_algo': client.default_algo
+        }, status=status.HTTP_200_OK)
+
+    except Client.DoesNotExist:
+        return Response({'error': 'Client not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    except SortingAlgorithm.DoesNotExist:
+        return Response({'error': 'Sorting algorithm not found'}, status=status.HTTP_404_NOT_FOUND)
 
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
