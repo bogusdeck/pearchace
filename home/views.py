@@ -94,20 +94,20 @@ def index(request):
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
-@shop_login_required
-@api_view(['GET'])
-@csrf_protect
-def get_collections(request):
-    shop_url = request.session.get('shopify', {}).get('shop_url')
+# @shop_login_required
+# @api_view(['GET'])
+# @csrf_protect
+# def get_collections(request):
+#     shop_url = request.session.get('shopify', {}).get('shop_url')
     
-    if not shop_url:
-        return Response({'error': 'Shop URL not found in session'}, status=status.HTTP_400_BAD_REQUEST)
+#     if not shop_url:
+#         return Response({'error': 'Shop URL not found in session'}, status=status.HTTP_400_BAD_REQUEST)
 
-    try:
-        collections = fetch_collections(shop_url)
-        return Response({'collections': collections}, status=status.HTTP_200_OK)
-    except Exception as e:
-        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+#     try:
+#         collections = fetch_collections(shop_url)
+#         return Response({'collections': collections}, status=status.HTTP_200_OK)
+#     except Exception as e:
+#         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @shop_login_required
 @api_view(['GET'])
@@ -427,5 +427,160 @@ def update_collection(request, collection_id):
         return Response({'error': 'Client not found'}, status=status.HTTP_404_NOT_FOUND)
     except ClientCollections.DoesNotExist:
         return Response({'error': 'Collection not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@shop_login_required
+@api_view(['POST'])
+def update_collection_settings(request):
+    try:
+        data = request.data
+        collectionid = data.get('collectionid')
+        clientid = data.get('clientid')
+
+        if not collectionid or not clientid:
+            return Response({'error': 'collectionid and clientid are required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        client = Client.objects.get(id=clientid)
+        collection = ClientCollections.objects.get(collectionid=collectionid, client=client)
+
+        if 'out_of_stock_down' in data:
+            collection.out_of_stock_down = data['out_of_stock_down']
+        
+        if 'pinned_out_of_stock_down' in data:
+            collection.pinned_out_of_stock_down = data['pinned_out_of_stock_down']
+        
+        if 'new_out_of_stock_down' in data:
+            collection.new_out_of_stock_down = data['new_out_of_stock_down']
+        
+        if 'lookback_periods' in data:
+            collection.lookback_periods = data['lookback_periods']
+        
+        collection.save()
+
+        return Response({
+            'message': 'Collection settings updated successfully',
+            'collectionid': collection.collectionid,
+            'clientid': client.id,
+            'out_of_stock_down': collection.out_of_stock_down,
+            'pinned_out_of_stock_down': collection.pinned_out_of_stock_down,
+            'new_out_of_stock_down': collection.new_out_of_stock_down,
+            'lookback_periods': collection.lookback_periods
+        }, status=status.HTTP_200_OK)
+
+    except Client.DoesNotExist:
+        return Response({'error': 'Client not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    except ClientCollections.DoesNotExist:
+        return Response({'error': 'Collection not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@shop_login_required
+@api_view(['POST'])
+def update_global_settings(request):
+    try:
+        data = request.data
+        clientid = data.get('clientid')
+
+        if not clientid:
+            return Response({'error': 'clientid is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        client = Client.objects.get(id=clientid)
+
+        if 'schedule_frequency' in data:
+            client.schedule_frequency = data['schedule_frequency']
+        
+        if 'stock_location' in data:
+            client.stock_location = data['stock_location']
+        
+        client.save()
+
+        return Response({
+            'message': 'Global settings updated successfully',
+            'clientid': client.id,
+            'schedule_frequency': client.schedule_frequency,
+            'stock_location': client.stock_location
+        }, status=status.HTTP_200_OK)
+
+    except Client.DoesNotExist:
+        return Response({'error': 'Client not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@shop_login_required
+@api_view(['GET'])
+def fetch_last_sort_date(request):
+    #GET /api/fetch-sort-date/?collectionid=12345&clientid=1
+    collectionid = request.GET.get('collectionid')
+    clientid = request.GET.get('clientid')
+
+    if not collectionid or not clientid:
+        return Response({'error': 'collectionid and clientid are required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        client = Client.objects.get(id=clientid)
+
+        collection = ClientCollections.objects.get(collectionid=collectionid, client=client)
+
+        return Response({
+            'collectionid': collection.collectionid,
+            'sort_date': collection.sort_date
+        }, status=status.HTTP_200_OK)
+
+    except Client.DoesNotExist:
+        return Response({'error': 'Client not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    except ClientCollections.DoesNotExist:
+        return Response({'error': 'Collection not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+
+@shop_login_required
+@api_view(['POST']) 
+@csrf_protect
+def get_and_update_collections(request):
+    client_id = request.data.get('clientid')
+
+    if not client_id:
+        return Response({'error': 'Client ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        client = Client.objects.get(id=client_id)
+        access_token = 123 # update this 
+
+        collections = fetch_collections(client.shop_url,access_token)
+
+        for collection in collections:
+            collection_data = {
+                'collectionid': collection['id'],
+                'collection_name': collection['title'],
+                'products_count': collection['products_count']
+            }
+
+            ClientCollections.objects.update_or_create(
+                collectionid=collection_data['collectionid'],
+                client=client,
+                defaults={
+                    'collection_name': collection_data['collection_name'],
+                    'products_count': collection_data['products_count'],
+                    'status': False,  
+                }
+            )
+
+        return Response({'message': 'Collections updated successfully'}, status=status.HTTP_200_OK)
+
+    except Client.DoesNotExist:
+        return Response({'error': 'Client not found'}, status=status.HTTP_404_NOT_FOUND)
+
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

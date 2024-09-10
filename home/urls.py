@@ -4,7 +4,7 @@ from . import views
 
 urlpatterns = [
     path('', views.index, name='root_path'),
-    path('api/collections/', views.get_collections, name='collections_list_api'),
+    # path('api/collections/', views.get_collections, name='collections_list_api'),
     path('api/products/', views.get_products, name='product_list_api'),
     path('api/update-products-order/', views.update_product_order, name="update_products_order_api"),
     path('api/client-info/', views.get_client_info, name='get_client_info'),
@@ -15,5 +15,8 @@ urlpatterns = [
     path('api/client-last-sorted-time/<int:client_id>/', views.get_last_sorted_time, name='get_last_sorted_time'),
     path('api/search-collections/<int:client_id>/', views.search_collections, name='search_collections'),
     path('api/update-collections/<str:collection_id>/', views.update_collection, name='update_collection'),
-    
+    path('api/update-collection-settings/', views.update_collection_settings, name='update-collection-settings'),
+    path('api/update-global-settings/', views.update_global_settings, name='update-global-settings'),
+    path('api/fetch-sort-date/', views.fetch_last_sort_date, name='fetch-sort-date'),
+    path('api/get-and-update-collections/', views.get_and_update_collections, name='get-and-update-collections'),
 ]

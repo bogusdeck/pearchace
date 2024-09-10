@@ -103,3 +103,5 @@ SHOPIFY_API_SECRET = os.environ.get('SHOPIFY_API_SECRET')
 STATIC_URL = '/static/'
 
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
+
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
