@@ -1,13 +1,17 @@
-from rest_framework.decorators import api_view
+from rest_framework.views import APIView
+from rest_framework.pagination import PageNumberPagination
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 from shopify_app.decorators import shop_login_required
 from django.http import JsonResponse
 from datetime import datetime
 import pytz
+from django.views.decorators.http import require_GET
 import shopify
 from django.views.decorators.csrf import csrf_protect
-from shopify_app.models import Client, Usage, Subscription, SortingPlan
+from shopify_app.models import Client, Usage, Subscription, SortingPlan, SortingAlgorithm, ClientCollections
 from shopify_app.api import fetch_collections, fetch_products_by_collection, update_collection_products_order, fetch_client_data
 from .strategies import (
     promote_new, 
@@ -22,7 +26,6 @@ from .strategies import (
 
 from django.shortcuts import get_object_or_404
 
-# Mapping algorithm IDs to their corresponding functions
 ALGO_ID_TO_FUNCTION = {
     '001': promote_new,
     '002': promote_high_revenue_products,
@@ -233,19 +236,16 @@ def available_sorts(request):
     shop_url = request.session.get('shopify', {}).get('shop_url')
 
     if not shop_url:
-        return Response({'error': 'Shop URL not found in session'}, status=status.HTTP_400_BAD_REQUEST)
+        return JsonResponse({'error': 'Shop URL not found in session'}, status=400)
 
     try:
         client = Client.objects.get(shop_url=shop_url)
 
         usage = Usage.objects.get(client=client)
-
         subscription = Subscription.objects.get(id=usage.subscription_id)
-
         sorting_plan = SortingPlan.objects.get(id=subscription.plan_id)
 
         sort_limit = sorting_plan.sort_limit
-
         available_sorts = sort_limit - usage.sort_count
 
         return JsonResponse({
@@ -270,34 +270,162 @@ def last_active_collections(request):
     shop_url = request.session.get('shopify', {}).get('shop_url')
 
     if not shop_url:
-        return Response({'error': 'Shop URL not found in session'}, status=status.HTTP_400_BAD_REQUEST)
+        return JsonResponse({'error': 'Shop URL not found in session'}, status=400)
 
     try:
         client = Client.objects.get(shop_url=shop_url)
-        collections = CollectionSort.objects.filter(client=client, status=True).order_by('-sortdate')[:5]
 
-        collection_data = []
-        for collection_sort in collection_sorts:
-            algo_name = SortingAlgorithm.objects.get(algo_id=collection_sort.algo_id).name
-            collection_name = ClientCollections.objects.get(collection_id=collection_sort.collection_id).collection_name
+        collections = ClientCollections.objects.filter(client=client, status=True).order_by('-sort_date')[:5]
+
+        collections_data = []
+        for collection in collections:
+            algo_name = SortingAlgorithm.objects.get(id=collection.algo.id).name
             
             collections_data.append({
-                'collection_id': collection_sort.collection_id,
-                'collection_name': collection_name,
-                'product_count': collection_sort.products_count,
-                'sort_date': collection_sort.sort_date,
+                'collection_id': collection.collectionid,
+                'collection_name': collection.collection_name,
+                'product_count': collection.products_count,
+                'sort_date': collection.sort_date,
                 'algo_name': algo_name
             })
 
-        return Response({'collections': collections_data}, status=status.HTTP_200_OK)
+        return JsonResponse({'collections': collections_data}, status=200)
 
     except Client.DoesNotExist:
-            return Response({'error': 'Client not found'}, status=status.HTTP_404_NOT_FOUND)
-    except CollectionSort.DoesNotExist:
-        return Response({'error': 'No collections found'}, status=status.HTTP_404_NOT_FOUND)
-    except SortingAlgorithm.DoesNotExist:
-        return Response({'error': 'Sorting algorithm not found'}, status=status.HTTP_404_NOT_FOUND)
+        return JsonResponse({'error': 'Client not found'}, status=404)
+    
     except ClientCollections.DoesNotExist:
-        return Response({'error': 'Client collections not found'}, status=status.HTTP_404_NOT_FOUND)
+        return JsonResponse({'error': 'No collections found'}, status=404)
+    
+    except SortingAlgorithm.DoesNotExist:
+        return JsonResponse({'error': 'Sorting algorithm not found'}, status=404)
+    
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@shop_login_required
+@require_GET
+def get_client_collections(request, client_id):
+    client_collections = ClientCollections.objects.filter(client_id=client_id)
+
+    collections_data = []
+    for collection in client_collections:
+        algo_name = SortingAlgorithm.objects.get(id=collection.algo.id).name
+
+        collections_data.append({
+            'collection_name': collection.collection_name,
+            'collection_id': collection.collectionid,
+            'status': collection.status,
+            'algo_name': algo_name  
+        })
+
+    return JsonResponse({'collections': collections_data}, safe=False)
+
+class ClientCollectionsPagination(PageNumberPagination):
+    page_size = 10  
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+@api_view(['GET'])
+@shop_login_required
+def get_client_collections(request, client_id):
+    # GET /api/client-collections/clientid/?page=2&page_size=5
+    client_collections = ClientCollections.objects.filter(client_id=client_id)
+
+    paginator = ClientCollectionsPagination()
+    paginated_collections = paginator.paginate_queryset(client_collections, request)
+
+    collections_data = []
+    for collection in paginated_collections:
+        algo_name = SortingAlgorithm.objects.get(id=collection.algo.id).name
+
+        collections_data.append({
+            'collection_name': collection.collection_name,
+            'collection_id': collection.collectionid,
+            'status': collection.status,
+            'algo_name': algo_name
+        })
+
+    return paginator.get_paginated_response(collections_data)
+
+@api_view(['GET'])
+@shop_login_required
+def get_last_sorted_time(request, client_id):
+    # GET /api/client-last-sorted-time/1/
+    try:
+
+        latest_usage = Usage.objects.filter(client_id=client_id).order_by('-updated_at').first()
+
+        if latest_usage:
+            response_data = {
+                'last_sorted_time': latest_usage.updated_at
+            }
+        else:
+            response_data = {
+                'error': 'No usage data found for this client'
+            }
+
+        return JsonResponse(response_data)
+
+    except Usage.DoesNotExist:
+        return JsonResponse({'error': 'Client or usage data not found'}, status=404)
+    
+@api_view(['GET'])
+@shop_login_required
+def search_collections(request, client_id):
+    # GET /api/search-collections/1/?q=summer
+    query = request.GET.get('q', '')
+    
+    collections = ClientCollections.objects.filter(client_id=client_id, collection_name__icontains=query)
+
+    collections_data = []
+    for collection in collections:
+        collections_data.append({
+            'collection_name': collection.collection_name,
+            'collection_id': collection.collectionid,
+            'status': collection.status,
+        })
+
+    return JsonResponse({'collections': collections_data}, safe=False)
+
+@shop_login_required
+@api_view(['PUT', 'PATCH'])
+def update_collection(request, collection_id):
+    try:
+        shop_url = request.session.get('shopify', {}).get('shop_url')
+        if not shop_url:
+            return Response({'error': 'Shop URL not found in session'}, status=status.HTTP_400_BAD_REQUEST)
+
+        client = Client.objects.get(shop_url=shop_url)
+
+        collection = ClientCollections.objects.get(client=client, collectionid=collection_id)
+
+        status_value = request.data.get('status')
+        algo_id = request.data.get('algo_id')
+
+        updated = False  
+
+        if status_value is not None:
+            collection.status = status_value
+            updated = True
+
+        if algo_id is not None:
+            try:
+                algo = SortingAlgorithm.objects.get(algo_id=algo_id)
+                collection.algo = algo
+                updated = True
+            except SortingAlgorithm.DoesNotExist:
+                return Response({'error': 'Algorithm not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        if updated:
+            collection.save()
+            return Response({'message': 'Collection updated successfully'}, status=status.HTTP_200_OK)
+        else:
+            return Response({'error': 'No valid fields provided to update'}, status=status.HTTP_400_BAD_REQUEST)
+
+    except Client.DoesNotExist:
+        return Response({'error': 'Client not found'}, status=status.HTTP_404_NOT_FOUND)
+    except ClientCollections.DoesNotExist:
+        return Response({'error': 'Collection not found'}, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

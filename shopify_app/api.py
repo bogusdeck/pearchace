@@ -259,7 +259,6 @@ def update_collection_products_order(shop_url, access_token, collection_id, sort
         }
         """
 
-        # Prepare variables
         moves = [
             {
                 "id": product_id,
@@ -269,7 +268,7 @@ def update_collection_products_order(shop_url, access_token, collection_id, sort
         ]
 
         variables = {
-            "id": collection_global_id,  # Pass the global collection ID here
+            "id": collection_global_id,  
             "moves": moves
         }
 
