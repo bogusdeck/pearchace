@@ -1,1 +1,1 @@
-web: python manage.py migrate && python manage.py collectstatic --noinput && gunicorn your_project_name.wsgi
+web: gunicorn shopify_django_app.wsgi:application
