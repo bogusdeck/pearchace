@@ -82,7 +82,7 @@ class SortingAlgorithm(models.Model):
     def __str__(self):
         return self.name
 
-#done\
+#done
 class ClientCollections(models.Model):
     id = models.BigAutoField(primary_key=True)  
     collectionid = models.CharField(max_length=255, unique=True)
