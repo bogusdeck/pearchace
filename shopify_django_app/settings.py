@@ -11,7 +11,7 @@ SECRET_KEY = os.environ.get('DJANGO_SECRET')
 
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['pearchace.onrender.com', 'localhost', '127.0.0.1']
 
 
 INSTALLED_APPS = [
