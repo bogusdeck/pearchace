@@ -2,7 +2,7 @@
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "shopify_django_app/wsgi.py"
+      "dest": "api/wsgi.py"
     }
   ]
 }
