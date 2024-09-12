@@ -9,3 +9,4 @@ djangorestframework
 requests
 whitenoise
 gunicorn
+psycopg2

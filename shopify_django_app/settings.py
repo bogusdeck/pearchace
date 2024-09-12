@@ -63,11 +63,11 @@ WSGI_APPLICATION = 'shopify_django_app.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'postgres',
-        'USER': 'postgres.cowhiulrkricytzcpuke',
+        'NAME': 'pearchdb',
+        'USER': 'pearchuser',
         'PASSWORD':'PearchTest@123',
-        'HOST':'aws-0-ap-south-1.pooler.supabase.com',
-        'PORT':'6543',
+        'HOST':'db',
+        'PORT':'5432',
     }
 }
 
