@@ -50,7 +50,9 @@ def index(request):
 
         if not shop_data:
             return JsonResponse({'error': 'Failed to fetch client data from Shopify'}, status=500)
-
+        
+        shop_id = shop_data.get('id', '')
+        client_id = shop_id.split('/')[-1]      
         email = shop_data.get('email', '')
         name = shop_data.get('name', '')
         contact_email = shop_data.get('contactEmail', '')
@@ -69,8 +71,10 @@ def index(request):
 
 
         client, created = Client.objects.update_or_create(
-            shop_name=shop_url,
+            client_id=client_id,
             defaults={
+                'shop_url':shop_url,
+                'shop_name':name,
                 'email': email, 
                 'phone_number': billing_address.get('phone', None),
                 'country': billing_address.get('countryCodeV2', ''),
