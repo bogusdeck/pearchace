@@ -45,8 +45,11 @@ ROOT_URLCONF = 'shopify_django_app.urls'
 CORS_ALLOW_ALL_ORIGINS = True
 
 CORS_ALLOWED_ORIGINS = [
-    'https://localhost:5173',
+    'http://3.108.104.68:3000',
+    'http://localhost:3000'
 ]
+
+CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOW_METHODS = [
     'GET',

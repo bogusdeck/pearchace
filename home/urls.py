@@ -5,6 +5,8 @@ from . import views
 urlpatterns = [
     # header 
     path('', views.index, name='root_path'),
+    path('api/get-client-info/', views.get_client_info, name="get_client_info"),
+
     # dashboard 
     # path('api/get-graph/',views.graph_dashboard, name='get-graph')
     path('api/available-sorts/', views.available_sorts, name='available_sorts'),

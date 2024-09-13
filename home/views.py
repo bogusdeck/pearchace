@@ -46,7 +46,7 @@ def index(request):
 
         if not shop_url or not access_token:
             return JsonResponse({'error': 'Shopify authentication required'}, status=403)
-
+    
         shop_data = fetch_client_data(shop_url, access_token)
         print(shop_data)
 
@@ -104,27 +104,27 @@ def index(request):
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
     
-# @shop_login_required
-# @api_view(['GET'])
-# def get_client_info(request):
-#     shop_url = request.GET.get('shop_url')
-#     if not shop_url:
-#         return Response({'error': 'Shop URL is required'}, status=status.HTTP_400_BAD_REQUEST)
+@shop_login_required
+@api_view(['GET'])
+def get_client_info(request):
+    shop_url = request.GET.get('shop_url')
+    if not shop_url:
+        return Response({'error': 'Shop URL is required'}, status=status.HTTP_400_BAD_REQUEST)
 
-#     try:
-#         client = Client.objects.get(shop_url=shop_url)
+    try:
+        client = Client.objects.get(shop_url=shop_url)
 
-#         return Response({
-#             'client_id': client.client_id,
-#             'shop_url': client.shop_url,
-#             'shop_name': client.shop_name
-#         }, status=status.HTTP_200_OK)
+        return Response({
+            'client_id': client.client_id,
+            'shop_url': client.shop_url,
+            'shop_name': client.shop_name
+        }, status=status.HTTP_200_OK)
 
-#     except Client.DoesNotExist:
-#         return Response({'error': 'Client not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Client.DoesNotExist:
+        return Response({'error': 'Client not found'}, status=status.HTTP_404_NOT_FOUND)
 
-#     except Exception as e:
-#         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @shop_login_required
