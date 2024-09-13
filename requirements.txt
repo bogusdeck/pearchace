@@ -10,3 +10,4 @@ requests
 whitenoise
 gunicorn
 psycopg2
+django-cors-headers

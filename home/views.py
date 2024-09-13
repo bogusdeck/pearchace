@@ -38,15 +38,17 @@ ALGO_ID_TO_FUNCTION = {
 }
 
 @shop_login_required
+@api_view(['GET'])
 def index(request):
-    try:
-        shop_url = request.session.get('shopify', {}).get('shop_url')
+    try:    
+        shop_url = request.GET.get('shop')
         access_token = request.session.get('shopify', {}).get('access_token')
 
         if not shop_url or not access_token:
             return JsonResponse({'error': 'Shopify authentication required'}, status=403)
 
         shop_data = fetch_client_data(shop_url, access_token)
+        print(shop_data)
 
         if not shop_data:
             return JsonResponse({'error': 'Failed to fetch client data from Shopify'}, status=500)
@@ -58,7 +60,7 @@ def index(request):
         contact_email = shop_data.get('contactEmail', '')
         currency = shop_data.get('currencyCode', '')
         timezone = shop_data.get('timezoneAbbreviation', '')
-        billing_address = shop_data.get('billingAddress', {})
+        billing_address = shop_data.get('billingAddress', {})       
         created_at_str = shop_data.get('createdAt', '')
 
         created_at = None
@@ -86,51 +88,78 @@ def index(request):
                 'uninstall_date': None,
                 'trial_used': False,
                 'timezone': timezone,
-                'createdateshopify': created_at
+                'createdateshopify': created_at,
+                'member': client.member if not created else False  
             }
         )
 
-        return JsonResponse({
-            'success': 'Client info fetched and stored successfully',
-            'client_data': shop_data
-        })
+        return Response({
+            'client_id': client.client_id,
+            'shop_url': client.shop_url,
+            'shop_name': client.shop_name,
+            'trail_used':client.trail_used,
+            'member': client.member
+        }, status=status.HTTP_200_OK)
 
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
-
-# @shop_login_required
-# @api_view(['GET'])
-# @csrf_protect
-# def get_collections(request):
-#     shop_url = request.session.get('shopify', {}).get('shop_url')
     
-#     if not shop_url:
-#         return Response({'error': 'Shop URL not found in session'}, status=status.HTTP_400_BAD_REQUEST)
-
-#     try:
-#         collections = fetch_collections(shop_url)
-#         return Response({'collections': collections}, status=status.HTTP_200_OK)
-#     except Exception as e:
-#         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 # @shop_login_required
 # @api_view(['GET'])
-# @csrf_protect
-# def get_products(request):
-#     shop_url = request.session.get('shopify', {}).get('shop_url')
-#     collection_id = request.GET.get('collection_id')
-
+# def get_client_info(request):
+#     shop_url = request.GET.get('shop_url')
 #     if not shop_url:
-#         return Response({'error': 'Shop URL not found in session'}, status=status.HTTP_400_BAD_REQUEST)
-
-#     if not collection_id:
-#         return Response({'error': 'Collection ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+#         return Response({'error': 'Shop URL is required'}, status=status.HTTP_400_BAD_REQUEST)
 
 #     try:
-#         products = fetch_products_by_collection(shop_url, collection_id)
-#         return Response({'products': products}, status=status.HTTP_200_OK)
+#         client = Client.objects.get(shop_url=shop_url)
+
+#         return Response({
+#             'client_id': client.client_id,
+#             'shop_url': client.shop_url,
+#             'shop_name': client.shop_name
+#         }, status=status.HTTP_200_OK)
+
+#     except Client.DoesNotExist:
+#         return Response({'error': 'Client not found'}, status=status.HTTP_404_NOT_FOUND)
+
 #     except Exception as e:
 #         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@shop_login_required
+@api_view(['GET'])
+@csrf_protect
+def get_collections(request):
+    shop_url = request.session.get('shopify', {}).get('shop_url')
+    
+    if not shop_url:
+        return Response({'error': 'Shop URL not found in session'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        collections = fetch_collections(shop_url)
+        return Response({'collections': collections}, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@shop_login_required
+@api_view(['GET'])
+@csrf_protect
+def get_products(request):
+    shop_url = request.session.get('shopify', {}).get('shop_url')
+    collection_id = request.GET.get('collection_id')
+
+    if not shop_url:
+        return Response({'error': 'Shop URL not found in session'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if not collection_id:
+        return Response({'error': 'Collection ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        products = fetch_products_by_collection(shop_url, collection_id)
+        return Response({'products': products}, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @shop_login_required
 @api_view(['POST'])
@@ -174,46 +203,46 @@ def update_product_order(request):
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
-@shop_login_required
-@api_view(['GET'])
-def get_client_info(request):
-    shop_url = request.session.get('shopify', {}).get('shop_url')
+# @shop_login_required
+# @api_view(['GET'])
+# def get_client_info(request):
+#     shop_url = request.session.get('shopify', {}).get('shop_url')
 
-    if not shop_url:
-        return Response({'error': 'Shop URL not found in session'}, status=status.HTTP_400_BAD_REQUEST)
+#     if not shop_url:
+#         return Response({'error': 'Shop URL not found in session'}, status=status.HTTP_400_BAD_REQUEST)
 
-    try:
-        client = Client.objects.get(shop_url=shop_url)
+#     try:
+#         client = Client.objects.get(shop_url=shop_url)
 
-        client_data = {
-            'client_id': client.client_id,
-            'shop_name': client.shop_name,
-            'email': client.email,
-            'phone_number': client.phone_number,
-            'shop_url': client.shop_url,
-            'country': client.country,
-            'contact_email': client.contact_email,
-            'currency': client.currency,
-            'billingAddress': client.billingAddress,
-            'is_active': client.is_active,
-            'access_token': client.access_token,
-            'trial_used': client.trial_used,
-            'installation_date': client.installation_date,
-            'uninstall_date': client.uninstall_date,
-            'created_at': client.created_at,
-            'updated_at': client.updated_at,
-            'timezone': client.timezone,
-            'createdateshopify': client.createdateshopify,
-            'schedule_frequency': client.schedule_frequency,
-            'stock_location': client.stock_location,
-        }
+#         client_data = {
+#             'client_id': client.client_id,
+#             'shop_name': client.shop_name,
+#             'email': client.email,
+#             'phone_number': client.phone_number,
+#             'shop_url': client.shop_url,
+#             'country': client.country,
+#             'contact_email': client.contact_email,
+#             'currency': client.currency,
+#             'billingAddress': client.billingAddress,
+#             'is_active': client.is_active,
+#             'access_token': client.access_token,
+#             'trial_used': client.trial_used,
+#             'installation_date': client.installation_date,
+#             'uninstall_date': client.uninstall_date,
+#             'created_at': client.created_at,
+#             'updated_at': client.updated_at,
+#             'timezone': client.timezone,
+#             'createdateshopify': client.createdateshopify,
+#             'schedule_frequency': client.schedule_frequency,
+#             'stock_location': client.stock_location,
+#         }
 
-        return Response({'client_data': client_data}, status=status.HTTP_200_OK)
+#         return Response({'client_data': client_data}, status=status.HTTP_200_OK)
 
-    except Client.DoesNotExist:
-        return Response({'error': 'Client not found'}, status=status.HTTP_404_NOT_FOUND)
-    except Exception as e:
-        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+#     except Client.DoesNotExist:
+#         return Response({'error': 'Client not found'}, status=status.HTTP_404_NOT_FOUND)
+#     except Exception as e:
+#         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @shop_login_required
@@ -307,23 +336,23 @@ def last_active_collections(request):
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
-@shop_login_required
-@require_GET
-def get_client_collections(request, client_id):
-    client_collections = ClientCollections.objects.filter(client_id=client_id)
+# @shop_login_required
+# @require_GET
+# def get_client_collections(request, client_id):
+#     client_collections = ClientCollections.objects.filter(client_id=client_id)
 
-    collections_data = []
-    for collection in client_collections:
-        algo_name = SortingAlgorithm.objects.get(id=collection.algo.id).name
+#     collections_data = []
+#     for collection in client_collections:
+#         algo_name = SortingAlgorithm.objects.get(id=collection.algo.id).name
 
-        collections_data.append({
-            'collection_name': collection.collection_name,
-            'collection_id': collection.collectionid,
-            'status': collection.status,
-            'algo_name': algo_name  
-        })
+#         collections_data.append({
+#             'collection_name': collection.collection_name,
+#             'collection_id': collection.collectionid,
+#             'status': collection.status,
+#             'algo_name': algo_name  
+#         })
 
-    return JsonResponse({'collections': collections_data}, safe=False)
+#     return JsonResponse({'collections': collections_data}, safe=False)
 
 class ClientCollectionsPagination(PageNumberPagination):
     page_size = 10  

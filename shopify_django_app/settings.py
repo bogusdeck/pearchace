@@ -24,9 +24,11 @@ INSTALLED_APPS = [
     'shopify_app.apps.ShopifyAppConfig',
     'home.apps.HomeConfig',
     'rest_framework',
+    'corsheaders'
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -39,6 +41,27 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = 'shopify_django_app.urls'
+
+CORS_ALLOW_ALL_ORIGINS = True
+
+CORS_ALLOWED_ORIGINS = [
+    'https://localhost:5173',
+]
+
+CORS_ALLOW_METHODS = [
+    'GET',
+    'POST',
+    'PUT',
+    'PATCH',
+    'DELETE',
+    'OPTIONS',
+]
+
+CORS_ALLOW_HEADERS = [
+    'authorization',
+    'content-type',
+]
+
 
 TEMPLATES = [
     {

@@ -6,21 +6,18 @@ from django.template import RequestContext
 from django.apps import apps
 import hmac, base64, hashlib, binascii, os
 import shopify
-from .models import Client
 from .decorators import shop_login_required
-from .api import fetch_client_data
-import asyncio
-from datetime import datetime
-import pytz
+from datetime import datetime  
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
+from .models import Client
 
 def _new_session(shop_url):
     api_version = apps.get_app_config('shopify_app').SHOPIFY_API_VERSION
     return shopify.Session(shop_url, api_version)
 
 def login(request):
-    """
-    Initiates the Shopify OAuth process by redirecting to Shopify for authentication.
-    """
     shop_url = request.GET.get('shop')
     if not shop_url:
         return JsonResponse({'error': 'Shop URL parameter is required'}, status=400)
@@ -33,9 +30,6 @@ def login(request):
     return redirect(permission_url)
 
 def finalize(request):
-    """
-    Handles the OAuth callback from Shopify, finalizes authentication, and stores the access token.
-    """
     api_secret = apps.get_app_config('shopify_app').SHOPIFY_API_SECRET
     params = request.GET.dict()
 
@@ -58,30 +52,28 @@ def finalize(request):
             "access_token": access_token
         }
 
-        return redirect('root_path')  
+        frontend_url = f"http://localhost:5173/?shop={shop_url}"
+        return redirect(frontend_url)  
 
     except Exception as e:
         return JsonResponse({'error': f'Could not log in: {str(e)}'}, status=500)
 
-    
 @shop_login_required
+@api_view(['GET'])
 def logout(request):
-    """
-    Logs out the user by clearing the session and deactivating the access token.
-    """
     if 'shopify' in request.session:
         shop_url = request.session['shopify']['shop_url']
 
         try:
-            client = Client.objects.get(shop_name=shop_url)
+            client = Client.objects.get(shop_url=shop_url)
             client.access_token = None
             client.is_active = False
             client.save()
 
             request.session.pop('shopify', None)
-            return JsonResponse({'success': 'Successfully logged out'}, status=200)
+
+            return Response({'success': 'Successfully logged out'}, status=status.HTTP_200_OK)
         except Client.DoesNotExist:
-            return JsonResponse({'error': 'Client does not exist'}, status=404)
+            return Response({'error': 'Client does not exist'}, status=status.HTTP_404_NOT_FOUND)
     else:
-        return JsonResponse({'error': 'Not logged in'}, status=400)
-    
+        return Response({'error': 'Not logged in'}, status=status.HTTP_400_BAD_REQUEST)
