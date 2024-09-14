@@ -52,7 +52,7 @@ def finalize(request):
             "access_token": access_token
         }
 
-        frontend_url = f"http://localhost:5173/?shop={shop_url}"
+        frontend_url = f"http://3.108.104.68:80/?shop={shop_url}"
         return redirect(frontend_url)  
 
     except Exception as e:
