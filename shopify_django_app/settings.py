@@ -24,6 +24,7 @@ INSTALLED_APPS = [
     'shopify_app.apps.ShopifyAppConfig',
     'home.apps.HomeConfig',
     'rest_framework',
+    'rest_framework_simplejwt',
     'corsheaders'
 ]
 
@@ -137,3 +138,9 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+}

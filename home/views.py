@@ -4,6 +4,8 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework_simplejwt.tokens import RefreshToken
+from django.shortcuts import redirect
 from shopify_app.decorators import shop_login_required
 from django.http import JsonResponse
 from datetime import datetime
@@ -37,7 +39,6 @@ ALGO_ID_TO_FUNCTION = {
     '008': sort_alphabetically
 }
 
-
 @shop_login_required
 def index(request):
     try:
@@ -52,12 +53,14 @@ def index(request):
         if not shop_data:
             return JsonResponse({'error': 'Failed to fetch client data from Shopify'}, status=500)
 
+        shop_id = shop_data.get('id', '')
+        client_id = shop_id.split('/')[-1]      
         email = shop_data.get('email', '')
         name = shop_data.get('name', '')
         contact_email = shop_data.get('contactEmail', '')
         currency = shop_data.get('currencyCode', '')
         timezone = shop_data.get('timezoneAbbreviation', '')
-        billing_address = shop_data.get('billingAddress', {})
+        billing_address = shop_data.get('billingAddress', {})       
         created_at_str = shop_data.get('createdAt', '')
 
         created_at = None
@@ -70,8 +73,10 @@ def index(request):
 
 
         client, created = Client.objects.update_or_create(
-            shop_name=shop_url,
+            client_id=client_id,
             defaults={
+                'shop_url':shop_url,
+                'shop_name':name,
                 'email': email, 
                 'phone_number': billing_address.get('phone', None),
                 'country': billing_address.get('countryCodeV2', ''),
@@ -83,18 +88,28 @@ def index(request):
                 'uninstall_date': None,
                 'trial_used': False,
                 'timezone': timezone,
-                'createdateshopify': created_at
+                'createdateshopify': created_at,
+                # 'member': client.member if not created else False  
             }
         )
 
-        return JsonResponse({
-            'success': 'Client info fetched and stored successfully',
-            'client_data': shop_data
-        })
+        if created:
+            client.member = False
+        client.save()
+
+        refresh = RefreshToken.for_user(client)
+        token = str(refresh.access_token)
+
+        frontend_url = f"https://pearch.vercel.app/"
+        
+        redirect_url = f"{frontend_url}?token={token}"
+        return redirect(redirect_url)
 
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
-    
+
+
+        
 
 @api_view(['GET'])
 def get_client_info(request):
