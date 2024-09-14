@@ -37,7 +37,7 @@ ALGO_ID_TO_FUNCTION = {
     '008': sort_alphabetically
 }
 
-@shop_login_required
+
 @api_view(['GET'])
 def index(request):
     try:    
@@ -104,7 +104,7 @@ def index(request):
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
     
-    
+
 @api_view(['GET'])
 def get_client_info(request):
     shop_url = request.GET.get('shop_url')
