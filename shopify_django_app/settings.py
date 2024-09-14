@@ -46,6 +46,7 @@ CORS_ALLOW_ALL_ORIGINS = True
 
 CORS_ALLOWED_ORIGINS = [
     'http://3.108.104.68:80',
+    'https://pearch.vercel.app',
     'http://localhost:80'
 ]
 
@@ -89,14 +90,17 @@ WSGI_APPLICATION = 'shopify_django_app.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'pearchdb',
-        'USER': 'pearchuser',
+        'NAME': 'postgres',
+        'USER': 'postgres.jqgjuewcbsnidzbxyymm',
         'PASSWORD':'PearchTest@123',
-        'HOST':'db',
-        'PORT':'5432',
+        'HOST':'aws-0-us-east-1.pooler.supabase.com',
+        'PORT':'6543',
     }
 }
 
+# user= pearchuser , name=pearchdb , password = PearchTest@123 , host=db , port = 5432 
+
+# user=postgres.jqgjuewcbsnidzbxyymm password=[YOUR-PASSWORD] host=aws-0-us-east-1.pooler.supabase.com port=6543 dbname=postgres
 
 AUTH_PASSWORD_VALIDATORS = [
     {
