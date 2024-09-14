@@ -30,6 +30,9 @@ def login(request):
     return redirect(permission_url)
 
 def finalize(request):
+    """
+    Handles the OAuth callback from Shopify, finalizes authentication, and stores the access token.
+    """
     api_secret = apps.get_app_config('shopify_app').SHOPIFY_API_SECRET
     params = request.GET.dict()
 
@@ -52,11 +55,11 @@ def finalize(request):
             "access_token": access_token
         }
 
-        frontend_url = f"https://pearch.vercel.app/?shop={shop_url}"
-        return redirect(frontend_url)  
+        return redirect('root_path')  
 
     except Exception as e:
         return JsonResponse({'error': f'Could not log in: {str(e)}'}, status=500)
+
 
 @shop_login_required
 @api_view(['GET'])

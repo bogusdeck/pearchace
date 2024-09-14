@@ -38,29 +38,26 @@ ALGO_ID_TO_FUNCTION = {
 }
 
 
-@api_view(['GET'])
+@shop_login_required
 def index(request):
-    try:    
-        shop_url = request.GET.get('shop')
+    try:
+        shop_url = request.session.get('shopify', {}).get('shop_url')
         access_token = request.session.get('shopify', {}).get('access_token')
 
         if not shop_url or not access_token:
             return JsonResponse({'error': 'Shopify authentication required'}, status=403)
-    
+
         shop_data = fetch_client_data(shop_url, access_token)
-        print(shop_data)
 
         if not shop_data:
             return JsonResponse({'error': 'Failed to fetch client data from Shopify'}, status=500)
-        
-        shop_id = shop_data.get('id', '')
-        client_id = shop_id.split('/')[-1]      
+
         email = shop_data.get('email', '')
         name = shop_data.get('name', '')
         contact_email = shop_data.get('contactEmail', '')
         currency = shop_data.get('currencyCode', '')
         timezone = shop_data.get('timezoneAbbreviation', '')
-        billing_address = shop_data.get('billingAddress', {})       
+        billing_address = shop_data.get('billingAddress', {})
         created_at_str = shop_data.get('createdAt', '')
 
         created_at = None
@@ -73,10 +70,8 @@ def index(request):
 
 
         client, created = Client.objects.update_or_create(
-            client_id=client_id,
+            shop_name=shop_url,
             defaults={
-                'shop_url':shop_url,
-                'shop_name':name,
                 'email': email, 
                 'phone_number': billing_address.get('phone', None),
                 'country': billing_address.get('countryCodeV2', ''),
@@ -88,18 +83,14 @@ def index(request):
                 'uninstall_date': None,
                 'trial_used': False,
                 'timezone': timezone,
-                'createdateshopify': created_at,
-                'member': client.member if not created else False  
+                'createdateshopify': created_at
             }
         )
 
-        return Response({
-            'client_id': client.client_id,
-            'shop_url': client.shop_url,
-            'shop_name': client.shop_name,
-            'trail_used':client.trail_used,
-            'member': client.member
-        }, status=status.HTTP_200_OK)
+        return JsonResponse({
+            'success': 'Client info fetched and stored successfully',
+            'client_data': shop_data
+        })
 
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
