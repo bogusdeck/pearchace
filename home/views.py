@@ -220,7 +220,6 @@ def update_product_order(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-@shop_login_required
 def available_sorts(request):
     auth_header = request.headers.get('Authorization', None)
     if auth_header is None:
@@ -248,11 +247,11 @@ def available_sorts(request):
             sort_limit = sorting_plan.sort_limit
             available_sorts = sort_limit - usage.sort_count
 
-            return JsonResponse({
+            return Response({
                 "available_sorts": available_sorts,
                 "sort_limit": sort_limit,
                 "used_sorts": usage.sort_count
-            })
+            },status=status.HTTP_200_OK)
 
         except Usage.DoesNotExist:
             return JsonResponse({"error": "Usage record not found"}, status=status.HTTP_404_NOT_FOUND)
