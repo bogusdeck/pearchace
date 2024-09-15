@@ -11,7 +11,7 @@ SECRET_KEY = os.environ.get('DJANGO_SECRET')
 
 DEBUG = True
 
-ALLOWED_HOSTS = ['pearchace.onrender.com', 'localhost', '127.0.0.1', '.vercel.app', '3.108.104.68', 'pearchace.vercel.app', 'pearchace.up.railway.app']
+ALLOWED_HOSTS = ['pearchace.onrender.com', 'localhost', '127.0.0.1', '.vercel.app', '3.108.104.68', 'pearchace.vercel.app', 'pearchace.up.railway.app', '.ngrok-free.app']
 
 
 INSTALLED_APPS = [

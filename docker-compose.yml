@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:  
+  db:
+    container_name: pearchace-db
+    image: postgres:16   
+    environment:      
+      POSTGRES_DB: pearchdb      
+      POSTGRES_USER: pearchuser      
+      POSTGRES_PASSWORD: PearchTest@123    
+    volumes:      
+      - postgres_data:/var/lib/postgresql/data    
+    ports:      
+      - "5432:5432"  
+  
+  web:    
+    container_name: pearchace-web
+    build: .   
+    command: python manage.py runserver 0.0.0.0:8000    
+    volumes:      
+      - .:/app    
+    ports:      
+      - "8000:8000"    
+    depends_on:      
+      - db
+    
+  ngrok:
+    image: wernight/ngrok
+    ports:
+      - "4040:4040"  
+    environment:
+      - NGROK_AUTHTOKEN=2lPzuZPjCWjxaOeACdOp2HnBnRT_34QsMdJZhPF3BCX3Bzjfz 
+    command: ngrok http web:8000  
+
+volumes:  
+  postgres_data:
