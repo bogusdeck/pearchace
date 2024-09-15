@@ -21,7 +21,7 @@ class ClientManager(BaseUserManager):
         return self.create_user(shop_name, email, shop_id, password, **extra_fields)
 
 class Client(AbstractBaseUser):
-    client_id = models.BigAutoField(primary_key=True)
+    id = models.BigAutoField(primary_key=True)
     shop_id = models.CharField(max_length=255, unique=True)
     shop_name = models.CharField(max_length=255, unique=True)
     email = models.EmailField(max_length=255, unique=True)

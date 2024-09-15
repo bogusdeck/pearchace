@@ -4,7 +4,6 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework_simplejwt.tokens import RefreshToken
 from django.shortcuts import redirect
 from shopify_app.decorators import shop_login_required
 from django.http import JsonResponse
@@ -40,6 +39,14 @@ ALGO_ID_TO_FUNCTION = {
     '008': sort_alphabetically
 }
 
+from rest_framework_simplejwt.views import TokenRefreshView
+from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.tokens import RefreshToken
+from django.http import JsonResponse
+from django.shortcuts import redirect
+import pytz
+
+
 @shop_login_required
 def index(request):
     try:
@@ -55,29 +62,29 @@ def index(request):
             return JsonResponse({'error': 'Failed to fetch client data from Shopify'}, status=500)
 
         shop_gid = shop_data.get('id', '')
-        shop_id = shop_gid.split('/')[-1]  
+        shop_id = shop_gid.split('/')[-1]
         email = shop_data.get('email', '')
         name = shop_data.get('name', '')
         contact_email = shop_data.get('contactEmail', '')
         currency = shop_data.get('currencyCode', '')
         timezone = shop_data.get('timezoneAbbreviation', '')
-        billing_address = shop_data.get('billingAddress', {})       
+        billing_address = shop_data.get('billingAddress', {})
         created_at_str = shop_data.get('createdAt', '')
 
         created_at = None
         if created_at_str:
             try:
                 created_at = datetime.strptime(created_at_str, '%Y-%m-%dT%H:%M:%SZ')
-                created_at = created_at.replace(tzinfo=pytz.UTC)  
+                created_at = created_at.replace(tzinfo=pytz.UTC)
             except ValueError:
                 created_at = None
 
         client, created = Client.objects.update_or_create(
-            shop_id=shop_id,  
+            shop_id=shop_id,
             defaults={
                 'shop_url': shop_url,
                 'shop_name': name,
-                'email': email, 
+                'email': email,
                 'phone_number': billing_address.get('phone', None),
                 'country': billing_address.get('countryCodeV2', ''),
                 'contact_email': contact_email,
@@ -96,21 +103,21 @@ def index(request):
             client.member = False
         client.save()
 
-        print(client)
+        refresh = RefreshToken.for_user(client)
+        access_token = str(refresh.access_token)
+        refresh_token = str(refresh)
 
-        token = default_token_generator.make_token(client)
-        
         frontend_url = f"https://pearch.vercel.app/"
-        redirect_url = f"{frontend_url}?token={token}"
+        redirect_url = f"{frontend_url}?access_token={access_token}&refresh_token={refresh_token}"
+
         return redirect(redirect_url)
 
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
-
-
         
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def get_client_info(request):
     shop_url = request.GET.get('shop_url')
     if not shop_url:
@@ -120,7 +127,7 @@ def get_client_info(request):
         client = Client.objects.get(shop_url=shop_url)
 
         return Response({
-            'client_id': client.client_id,
+            'client_id': client.shop_id,
             'shop_url': client.shop_url,
             'shop_name': client.shop_name
         }, status=status.HTTP_200_OK)
@@ -130,6 +137,8 @@ def get_client_info(request):
 
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 
 
 @shop_login_required
