@@ -2,30 +2,54 @@ from django.db import models
 from django.utils import timezone
 from timezone_field import TimeZoneField
 from django.contrib.postgres.fields import CICharField  
+from django.contrib.auth.models import AbstractBaseUser, BaseUserManager
 
 #done
-class Client(models.Model):
+class ClientManager(BaseUserManager):
+    def create_user(self, shop_name, email, shop_id, password=None, **extra_fields):
+        if not email:
+            raise ValueError('The Email field must be set')
+        email = self.normalize_email(email)
+        client = self.model(shop_name=shop_name, email=email, shop_id=shop_id, **extra_fields)
+        client.set_password(password)  # Use set_password to hash the password
+        client.save(using=self._db)
+        return client
+
+    def create_superuser(self, shop_name, email, shop_id, password=None, **extra_fields):
+        extra_fields.setdefault('is_superuser', True)
+        extra_fields.setdefault('is_staff', True)
+        return self.create_user(shop_name, email, shop_id, password, **extra_fields)
+
+class Client(AbstractBaseUser):
     client_id = models.BigAutoField(primary_key=True)
+    shop_id = models.CharField(max_length=255, unique=True)
     shop_name = models.CharField(max_length=255, unique=True)
-    email = models.EmailField(max_length=255)
+    email = models.EmailField(max_length=255, unique=True)
     phone_number = models.CharField(max_length=20, blank=True, null=True)
     shop_url = models.URLField(max_length=255, blank=True, null=True)
     country = models.CharField(max_length=255, blank=True, null=True)
-    contact_email = models.EmailField(max_length=255, blank=True, null=True) 
-    currency = models.CharField(max_length=10, blank=True, null=True) 
-    is_active = models.BooleanField(default=None, null=True)
+    contact_email = models.EmailField(max_length=255, blank=True, null=True)
+    currency = models.CharField(max_length=10, blank=True, null=True)
+    is_active = models.BooleanField(default=True)
     access_token = models.TextField(blank=True, null=True)
     trial_used = models.BooleanField(default=False)
     installation_date = models.DateTimeField(auto_now_add=True)
     uninstall_date = models.DateTimeField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    # subscription_status = models.BooleanField(max_length=50, default="inactive")
     default_algo = models.ForeignKey('SortingAlgorithm', on_delete=models.SET_NULL, null=True, blank=True)
     member = models.BooleanField(default=False)
-    timezone = models.CharField(default='UTC', max_length=3)  
-    createdateshopify = models.DateTimeField(blank=True, null=True) 
+    timezone = models.CharField(default='UTC', max_length=3)
+    createdateshopify = models.DateTimeField(blank=True, null=True)
     billingAddress = models.JSONField(default=dict)
+    
+    # Required fields for AbstractBaseUser
+    password = models.CharField(max_length=128)  
+    last_login = models.DateTimeField(blank=True, null=True)
+
+    # Required fields for custom User model
+    is_staff = models.BooleanField(default=False)
+    is_superuser = models.BooleanField(default=False)
 
     SCHEDULE_FREQUENCY_CHOICES = [
         ('hourly', 'Hourly'),
@@ -50,8 +74,19 @@ class Client(models.Model):
         default='all'
     )
 
+    USERNAME_FIELD = 'email'
+    REQUIRED_FIELDS = ['shop_name', 'shop_id']
+
+    objects = ClientManager()
+
     def __str__(self):
         return self.shop_name
+
+    def has_perm(self, perm, obj=None):
+        return self.is_superuser
+
+    def has_module_perms(self, app_label):
+        return self.is_superuser
 
 #done
 class SortingPlan(models.Model):

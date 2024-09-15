@@ -27,6 +27,7 @@ from .strategies import (
 )
 
 from django.shortcuts import get_object_or_404
+from django.contrib.auth.tokens import default_token_generator
 
 ALGO_ID_TO_FUNCTION = {
     '001': promote_new,
@@ -53,8 +54,8 @@ def index(request):
         if not shop_data:
             return JsonResponse({'error': 'Failed to fetch client data from Shopify'}, status=500)
 
-        shop_id = shop_data.get('id', '')
-        client_id = shop_id.split('/')[-1]      
+        shop_gid = shop_data.get('id', '')
+        shop_id = shop_gid.split('/')[-1]  
         email = shop_data.get('email', '')
         name = shop_data.get('name', '')
         contact_email = shop_data.get('contactEmail', '')
@@ -71,12 +72,11 @@ def index(request):
             except ValueError:
                 created_at = None
 
-
         client, created = Client.objects.update_or_create(
-            client_id=client_id,
+            shop_id=shop_id,  
             defaults={
-                'shop_url':shop_url,
-                'shop_name':name,
+                'shop_url': shop_url,
+                'shop_name': name,
                 'email': email, 
                 'phone_number': billing_address.get('phone', None),
                 'country': billing_address.get('countryCodeV2', ''),
@@ -89,7 +89,6 @@ def index(request):
                 'trial_used': False,
                 'timezone': timezone,
                 'createdateshopify': created_at,
-                # 'member': client.member if not created else False  
             }
         )
 
@@ -97,11 +96,11 @@ def index(request):
             client.member = False
         client.save()
 
-        refresh = RefreshToken.for_user(client)
-        token = str(refresh.access_token)
+        print(client)
 
-        frontend_url = f"https://pearch.vercel.app/"
+        token = default_token_generator.make_token(client)
         
+        frontend_url = f"https://pearch.vercel.app/"
         redirect_url = f"{frontend_url}?token={token}"
         return redirect(redirect_url)
 
