@@ -42,15 +42,9 @@ ALGO_ID_TO_FUNCTION = {
 from rest_framework_simplejwt.views import TokenRefreshView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
-from django.http import JsonResponse
-from django.shortcuts import redirect
-import pytz
 
-from django.shortcuts import redirect
-from django.http import JsonResponse
-from rest_framework_simplejwt.tokens import RefreshToken
-from datetime import datetime
-import pytz
+from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework_simplejwt.exceptions import InvalidToken
 
 @shop_login_required
 def index(request):
@@ -123,7 +117,7 @@ def index(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def get_client_info(request):
+def get_client_info(request): #working and done
     shop_url = request.GET.get('shop_url')
     if not shop_url:
         return Response({'error': 'Shop URL is required'}, status=status.HTTP_400_BAD_REQUEST)
@@ -160,6 +154,7 @@ def get_collections(request):
         return Response({'collections': collections}, status=status.HTTP_200_OK)
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 @shop_login_required
 @api_view(['GET'])
@@ -222,98 +217,56 @@ def update_product_order(request):
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
-# @shop_login_required
-# @api_view(['GET'])
-# def get_client_info(request):
-#     shop_url = request.session.get('shopify', {}).get('shop_url')
 
-#     if not shop_url:
-#         return Response({'error': 'Shop URL not found in session'}, status=status.HTTP_400_BAD_REQUEST)
-
-#     try:
-#         client = Client.objects.get(shop_url=shop_url)
-
-#         client_data = {
-#             'client_id': client.client_id,
-#             'shop_name': client.shop_name,
-#             'email': client.email,
-#             'phone_number': client.phone_number,
-#             'shop_url': client.shop_url,
-#             'country': client.country,
-#             'contact_email': client.contact_email,
-#             'currency': client.currency,
-#             'billingAddress': client.billingAddress,
-#             'is_active': client.is_active,
-#             'access_token': client.access_token,
-#             'trial_used': client.trial_used,
-#             'installation_date': client.installation_date,
-#             'uninstall_date': client.uninstall_date,
-#             'created_at': client.created_at,
-#             'updated_at': client.updated_at,
-#             'timezone': client.timezone,
-#             'createdateshopify': client.createdateshopify,
-#             'schedule_frequency': client.schedule_frequency,
-#             'stock_location': client.stock_location,
-#         }
-
-#         return Response({'client_data': client_data}, status=status.HTTP_200_OK)
-
-#     except Client.DoesNotExist:
-#         return Response({'error': 'Client not found'}, status=status.HTTP_404_NOT_FOUND)
-#     except Exception as e:
-#         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-@shop_login_required
 @api_view(['GET'])
-def get_shopify_client_data(request):
-    shop_url = request.session.get('shopify', {}).get('shop_url')
-
-    if not shop_url:
-        return Response({'error': 'Shop URL not found in session'}, status=status.HTTP_400_BAD_REQUEST)
-
-    try:
-        shop_data = fetch_client_data(shop_url)
-        if shop_data:
-            return Response({'shop_data': shop_data}, status=status.HTTP_200_OK)
-        else:
-            return Response({'error': 'Failed to fetch shop data'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-    except Exception as e:
-        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
+@permission_classes([IsAuthenticated])
 @shop_login_required
-@require_GET
 def available_sorts(request):
-    shop_url = request.session.get('shopify', {}).get('shop_url')
-
-    if not shop_url:
-        return JsonResponse({'error': 'Shop URL not found in session'}, status=400)
-
+    auth_header = request.headers.get('Authorization', None)
+    if auth_header is None:
+        return JsonResponse({'error': 'Authorization header missing'}, status=status.HTTP_401_UNAUTHORIZED)
+    
     try:
-        client = Client.objects.get(shop_url=shop_url)
+        token = auth_header.split(' ')[1]  
 
-        usage = Usage.objects.get(client=client)
-        subscription = Subscription.objects.get(id=usage.subscription_id)
-        sorting_plan = SortingPlan.objects.get(id=subscription.plan_id)
+        jwt_auth = JWTAuthentication()
+        
+        validated_token = jwt_auth.get_validated_token(token)
+        user = jwt_auth.get_user(validated_token)
+        
+        shop_url = user.shop_url
 
-        sort_limit = sorting_plan.sort_limit
-        available_sorts = sort_limit - usage.sort_count
+        if not shop_url:
+            return JsonResponse({'error': 'Shop URL not found in token'}, status=status.HTTP_400_BAD_REQUEST)
 
-        return JsonResponse({
-            "available_sorts": available_sorts,
-            "sort_limit": sort_limit,
-            "used_sorts": usage.sort_count
-        })
+        try:
+            client = Client.objects.get(shop_url=shop_url)
+            usage = Usage.objects.get(client=client)
+            subscription = Subscription.objects.get(id=usage.subscription_id)
+            sorting_plan = SortingPlan.objects.get(id=subscription.plan_id)
 
-    except Usage.DoesNotExist:
-        return JsonResponse({"error": "Usage record not found"}, status=404)
-    
-    except Subscription.DoesNotExist:
-        return JsonResponse({"error": "Subscription record not found"}, status=404)
-    
-    except SortingPlan.DoesNotExist:
-        return JsonResponse({"error": "Sorting plan record not found"}, status=404)
+            sort_limit = sorting_plan.sort_limit
+            available_sorts = sort_limit - usage.sort_count
+
+            return JsonResponse({
+                "available_sorts": available_sorts,
+                "sort_limit": sort_limit,
+                "used_sorts": usage.sort_count
+            })
+
+        except Usage.DoesNotExist:
+            return JsonResponse({"error": "Usage record not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+        except Subscription.DoesNotExist:
+            return JsonResponse({"error": "Subscription record not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+        except SortingPlan.DoesNotExist:
+            return JsonResponse({"error": "Sorting plan record not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    except InvalidToken:
+        return JsonResponse({'error': 'Invalid token'}, status=status.HTTP_401_UNAUTHORIZED)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @shop_login_required
