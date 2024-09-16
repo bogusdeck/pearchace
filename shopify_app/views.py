@@ -23,7 +23,9 @@ def login(request):
         return JsonResponse({'error': 'Shop URL parameter is required'}, status=400)
 
     scope = apps.get_app_config('shopify_app').SHOPIFY_API_SCOPE
-    redirect_uri = request.build_absolute_uri(reverse('finalize'))
+    ngrok_url = 'https://6700-3-108-104-68.ngrok-free.app/'
+    redirect_uri = f"{ngrok_url}{reverse('finalize')}".replace('p//', 'p/')   
+    # redirect_uri = request.build_absolute_uri(reverse('finalize'))
     state = binascii.b2a_hex(os.urandom(15)).decode("utf-8")
     request.session['shopify_oauth_state_param'] = state
     permission_url = _new_session(shop_url).create_permission_url(scope, redirect_uri, state)

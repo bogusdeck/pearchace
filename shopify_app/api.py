@@ -20,7 +20,7 @@ def fetch_collections(shop_url):
         shop_url (str): The URL of the Shopify store.
         
     Returns:
-        list: A list of collections or an empty list if an error occurs.
+        list: A list of collections with id, title, and products_count.
     """
     client = _get_client(shop_url)
     if not client:
@@ -39,7 +39,10 @@ def fetch_collections(shop_url):
           node {
             id
             title
-            handle
+            productsCount {
+              count
+              precision
+            }
           }
         }
       }
@@ -50,10 +53,17 @@ def fetch_collections(shop_url):
     if response.status_code == 200:
         data = response.json()
         collections = data.get("data", {}).get("collections", {}).get("edges", [])
-        return [collection['node'] for collection in collections]
+        return [{
+            'id': collection['node']['id'],
+            'title': collection['node']['title'],
+            'products_count': collection['node']['productsCount']['count']
+        } for collection in collections]
     else:
         print(f"Error fetching collections: {response.status_code} - {response.text}")
         return []
+
+
+
 
 def fetch_products_by_collection(shop_url, collection_id):
     """
@@ -112,7 +122,7 @@ def _get_client(shop_url):
         Client: The Client instance or None if not found.
     """
     try:
-        return Client.objects.get(shop_name=shop_url)
+        return Client.objects.get(shop_url=shop_url)
     except Client.DoesNotExist:
         print(f"Client with shop URL {shop_url} does not exist.")
         return None

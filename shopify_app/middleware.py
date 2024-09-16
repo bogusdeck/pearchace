@@ -1,3 +1,4 @@
+from django.middleware.common import MiddlewareMixin
 from django.apps import apps
 from django.urls import reverse
 import shopify
@@ -24,4 +25,5 @@ class LoginProtection(object):
         response = self.get_response(request)
         shopify.ShopifyResource.clear_session()
         return response
+
 

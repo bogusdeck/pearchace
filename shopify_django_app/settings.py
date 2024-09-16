@@ -11,7 +11,7 @@ SECRET_KEY = os.environ.get('DJANGO_SECRET')
 
 DEBUG = True
 
-ALLOWED_HOSTS = ['pearchace.onrender.com', 'localhost', '127.0.0.1', '.vercel.app', '3.108.104.68', 'pearchace.vercel.app', 'pearchace.up.railway.app', '.ngrok-free.app']
+ALLOWED_HOSTS = ['pearchace.onrender.com', 'localhost', '127.0.0.1', '.vercel.app', '3.108.104.68', 'ec2-3-108-104-68.ap-south-1.compute.amazonaws.com', '.ngrok-free.app']
 
 
 INSTALLED_APPS = [
@@ -92,14 +92,14 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'postgres',
-        'USER': 'postgres.bdvnmpehnfnvexueinuq',
+        'USER': 'postgres.bcwssspjpeskbbzvhvex',
         'PASSWORD':'PearchTest@123',
         'HOST':'aws-0-us-east-1.pooler.supabase.com',
         'PORT':'6543',
     }
 }
 
-# user=postgres.bdvnmpehnfnvexueinuq password=[YOUR-PASSWORD] host=aws-0-us-east-1.pooler.supabase.com port=6543 dbname=postgres
+# user=postgres.bcwssspjpeskbbzvhvex password=[YOUR-PASSWORD] host=aws-0-us-east-1.pooler.supabase.com port=6543 dbname=postgres
 # user= pearchuser , name=pearchdb , password = PearchTest@123 , host=db , port = 5432 
 
 
@@ -119,7 +119,6 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 AUTH_USER_MODEL = 'shopify_app.Client'
-
 
 LANGUAGE_CODE = 'en-us'
 

@@ -11,7 +11,7 @@ class ClientManager(BaseUserManager):
             raise ValueError('The Email field must be set')
         email = self.normalize_email(email)
         client = self.model(shop_name=shop_name, email=email, shop_id=shop_id, **extra_fields)
-        client.set_password(password)  # Use set_password to hash the password
+        client.set_password(password)  
         client.save(using=self._db)
         return client
 
@@ -43,11 +43,10 @@ class Client(AbstractBaseUser):
     createdateshopify = models.DateTimeField(blank=True, null=True)
     billingAddress = models.JSONField(default=dict)
     
-    # Required fields for AbstractBaseUser
+    
     password = models.CharField(max_length=128)  
     last_login = models.DateTimeField(blank=True, null=True)
 
-    # Required fields for custom User model
     is_staff = models.BooleanField(default=False)
     is_superuser = models.BooleanField(default=False)
 
@@ -100,7 +99,10 @@ class SortingPlan(models.Model):
     cost_annual = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     sort_limit = models.IntegerField(null=True, blank=True)
     order_limit = models.IntegerField(null=True, blank=True)
-    client_id = models.ForeignKey('Client', on_delete=models.CASCADE, null=True, blank=True)
+    shop_id = models.CharField(max_length=255)  
+
+    class Meta:
+        unique_together = ('shop_id', 'plan_id')  
 
     def __str__(self):
         return self.name
@@ -119,16 +121,16 @@ class SortingAlgorithm(models.Model):
 
 #done
 class ClientCollections(models.Model):
-    id = models.BigAutoField(primary_key=True)  
-    collectionid = models.CharField(max_length=255, unique=True)
-    client = models.ForeignKey('Client', on_delete=models.CASCADE, related_name='collections')
+    id = models.BigAutoField(primary_key=True)
+    collectionid = models.BigIntegerField(unique=True)
+    shop_id = models.CharField(max_length=255)
     collection_name = models.CharField(max_length=255)
     status = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     products_count = models.IntegerField(default=0)
     sort_date = models.DateTimeField(null=True, blank=True)
     pinned_products = models.JSONField(blank=True, null=True)
-    algo = models.ForeignKey('SortingAlgorithm', on_delete=models.CASCADE)
+    algo = models.ForeignKey('SortingAlgorithm', on_delete=models.CASCADE, null=True, blank=True)
     parameters_used = models.JSONField(default=dict)
     updated_at = models.DateTimeField(auto_now=True)
     out_of_stock_down = models.BooleanField(default=False)
@@ -136,13 +138,16 @@ class ClientCollections(models.Model):
     new_out_of_stock_down = models.BooleanField(default=False)
     lookback_periods = models.CharField(max_length=255, blank=True, null=True)
 
+    class Meta:
+        unique_together = ('shop_id', 'collectionid')  
+
     def __str__(self):
-        return f"{self.collection_name} (ID: {self.collectionid}) for {self.client.shop_name} - Sorted on {self.sort_date}"
+        return f"{self.collection_name} (ID: {self.collectionid}) for shop_id {self.shop_id} - Sorted on {self.sort_date}"
 
 #done
 class Subscription(models.Model):
     subscription_id = models.AutoField(primary_key=True)
-    client = models.ForeignKey('Client', on_delete=models.CASCADE)
+    shop_id = models.CharField(max_length=255)  
     plan = models.ForeignKey(SortingPlan, on_delete=models.CASCADE)
     status = models.CharField(max_length=50)
     current_period_start = models.DateTimeField()
@@ -156,13 +161,17 @@ class Subscription(models.Model):
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        unique_together = ('shop_id', 'subscription_id')  
+
     def __str__(self):
-        return f"Subscription {self.subscription_id} for {self.client.shop_name}"
+        return f"Subscription {self.subscription_id} for shop_id {self.shop_id}"
+
 #done
 class Usage(models.Model):
     usage_id = models.AutoField(primary_key=True)
-    client = models.ForeignKey('Client', on_delete=models.CASCADE)
-    subscription = models.ForeignKey(Subscription, on_delete=models.CASCADE)
+    shop_id = models.CharField(max_length=255)  
+    subscription = models.ForeignKey('Subscription', on_delete=models.CASCADE)
     sorts_count = models.IntegerField(default=0)
     orders_count = models.IntegerField(default=0)
     addon_sorts_count = models.IntegerField(default=0)
@@ -172,9 +181,12 @@ class Usage(models.Model):
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
 
-    def __str__(self):
-        return f"Usage {self.usage_id} for {self.client.shop_name} on {self.usage_date}"
+    class Meta:
+        unique_together = ('shop_id', 'usage_id') 
 
+    def __str__(self):
+        return f"Usage {self.usage_id} for shop_id {self.shop_id} on {self.usage_date}"
+    
 #done not dealing with it much 
 class PlanHistory(models.Model):
     id = models.AutoField(primary_key=True)

@@ -95,8 +95,3 @@ def promote_high_revenue_new_products(products, lookback_days: int, top_percenti
 
     return [p['id'] for p in reordered_products]
 
-def sort_alphabetically(products):
-    if not isinstance(products, list) or not all(isinstance(p, dict) for p in products):
-        raise ValueError("Expected a list of dictionaries for products")
-    sorted_products = sorted(products, key=lambda x: x['title'].lower())
-    return [p['id'] for p in sorted_products]
