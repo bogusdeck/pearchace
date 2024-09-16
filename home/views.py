@@ -126,17 +126,15 @@ def get_client_info(request): #working and tested
         validated_token = jwt_auth.get_validated_token(token)
         user = jwt_auth.get_user(validated_token)
         
-        shop_url = user.shop_url
+        shop_id = user.shop_id
 
-        if not shop_url:
-            return Response({'error': 'Shop URL not found in session'}, status=status.HTTP_400_BAD_REQUEST)
+        if not shop_id:
+            return Response({'error': 'Shop ID not found in session'}, status=status.HTTP_400_BAD_REQUEST)
 
         try: 
-            client = Client.objects.get(shop_url=shop_url)
-            print("client:", client)
-            print("shop url :", shop_url)
+            client = Client.objects.get(shop_id=shop_id)
 
-            collections = fetch_collections(shop_url)
+            collections = fetch_collections(client.shop_url)
 
             for collection in collections:
                 collection_id = int(collection['id'].split('/')[-1])  
@@ -146,7 +144,7 @@ def get_client_info(request): #working and tested
 
                 client_collection, created = ClientCollections.objects.get_or_create(
                     collectionid=collection_id,
-                    client=client,
+                    shop_id=shop_id,
                     defaults={
                         'collection_name': collection_name,
                         'products_count': products_count,
@@ -472,7 +470,7 @@ def get_last_sorted_time(request, client_id): #working not tested
     
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def search_collections(request, client_id):
+def search_collections(request, client_id): #working and tested
     auth_header = request.headers.get('Authorization', None)
     if auth_header is None:
         return Response({'error': 'Authorization header missing'}, status=status.HTTP_401_UNAUTHORIZED)
@@ -513,22 +511,31 @@ def search_collections(request, client_id):
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-@shop_login_required
 @api_view(['PUT', 'PATCH'])
-def update_collection(request, collection_id):
+@permission_classes([IsAuthenticated])
+def update_collection(request, collection_id): #working not tested      
+    auth_header = request.headers.get('Authorization', None)
+    if auth_header is None:
+        return Response({'error': 'Authorization header missing'}, status=status.HTTP_401_UNAUTHORIZED)
     try:
-        shop_url = request.session.get('shopify', {}).get('shop_url')
-        if not shop_url:
-            return Response({'error': 'Shop URL not found in session'}, status=status.HTTP_400_BAD_REQUEST)
+        token = auth_header.split(' ')[1]
+        jwt_auth = JWTAuthentication()
+        validated_token = jwt_auth.get_validated_token(token)
+        user = jwt_auth.get_user(validated_token)
 
-        client = Client.objects.get(shop_url=shop_url)
+        shop_id = user.shop_id
+        if not shop_id:
+            return Response({'error': 'Shop ID not found in session'}, status=status.HTTP_400_BAD_REQUEST)
 
-        collection = ClientCollections.objects.get(client=client, collectionid=collection_id)
+        # client = Client.objects.get(shop_id=shop_id)
+        collection = ClientCollections.objects.get(shop_id=shop_id, collectionid=collection_id)
+
+        print(collection)
 
         status_value = request.data.get('status')
         algo_id = request.data.get('algo_id')
 
-        updated = False  
+        updated = False
 
         if status_value is not None:
             collection.status = status_value
@@ -554,7 +561,6 @@ def update_collection(request, collection_id):
         return Response({'error': 'Collection not found'}, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 @shop_login_required
 @api_view(['POST'])
