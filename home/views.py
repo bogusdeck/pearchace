@@ -562,19 +562,31 @@ def update_collection(request, collection_id): #working not tested
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-@shop_login_required
 @api_view(['POST'])
-def update_collection_settings(request):
+@permission_classes([IsAuthenticated])
+def update_collection_settings(request): # working and tested
     try:
         data = request.data
         collectionid = data.get('collectionid')
-        clientid = data.get('clientid')
 
-        if not collectionid or not clientid:
-            return Response({'error': 'collectionid and clientid are required'}, status=status.HTTP_400_BAD_REQUEST)
+        if not collectionid:
+            return Response({'error': 'collectionid is required'}, status=status.HTTP_400_BAD_REQUEST)
 
-        client = Client.objects.get(id=clientid)
-        collection = ClientCollections.objects.get(collectionid=collectionid, client=client)
+        auth_header = request.headers.get('Authorization', None)
+        if auth_header is None:
+            return Response({'error': 'Authorization header missing'}, status=status.HTTP_401_UNAUTHORIZED)
+        
+        token = auth_header.split(' ')[1]
+        jwt_auth = JWTAuthentication()
+        validated_token = jwt_auth.get_validated_token(token)
+        user = jwt_auth.get_user(validated_token)
+
+        shop_id = user.shop_id
+        if not shop_id:
+            return Response({'error': 'Shop ID not found in session'}, status=status.HTTP_400_BAD_REQUEST)
+
+        client = Client.objects.get(shop_id=shop_id)
+        collection = ClientCollections.objects.get(collectionid=collectionid, shop_id=shop_id)
 
         if 'out_of_stock_down' in data:
             collection.out_of_stock_down = data['out_of_stock_down']
@@ -593,7 +605,7 @@ def update_collection_settings(request):
         return Response({
             'message': 'Collection settings updated successfully',
             'collectionid': collection.collectionid,
-            'clientid': client.id,
+            'shop_id': shop_id,
             'out_of_stock_down': collection.out_of_stock_down,
             'pinned_out_of_stock_down': collection.pinned_out_of_stock_down,
             'new_out_of_stock_down': collection.new_out_of_stock_down,
@@ -609,18 +621,26 @@ def update_collection_settings(request):
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
-@shop_login_required
 @api_view(['POST'])
-def update_global_settings(request):
+@permission_classes([IsAuthenticated])
+def update_global_settings(request): # working and tested
     try:
         data = request.data
-        clientid = data.get('clientid')
 
-        if not clientid:
-            return Response({'error': 'clientid is required'}, status=status.HTTP_400_BAD_REQUEST)
+        auth_header = request.headers.get('Authorization', None)
+        if auth_header is None:
+            return Response({'error': 'Authorization header missing'}, status=status.HTTP_401_UNAUTHORIZED)
+        
+        token = auth_header.split(' ')[1]
+        jwt_auth = JWTAuthentication()
+        validated_token = jwt_auth.get_validated_token(token)
+        user = jwt_auth.get_user(validated_token)
 
-        client = Client.objects.get(id=clientid)
+        shop_id = user.shop_id
+        if not shop_id:
+            return Response({'error': 'Shop ID not found in session'}, status=status.HTTP_400_BAD_REQUEST)
+
+        client = Client.objects.get(shop_id=shop_id)
 
         if 'schedule_frequency' in data:
             client.schedule_frequency = data['schedule_frequency']
@@ -632,7 +652,7 @@ def update_global_settings(request):
 
         return Response({
             'message': 'Global settings updated successfully',
-            'clientid': client.id,
+            'shop_id': client.shop_id,
             'schedule_frequency': client.schedule_frequency,
             'stock_location': client.stock_location
         }, status=status.HTTP_200_OK)
@@ -642,7 +662,6 @@ def update_global_settings(request):
 
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 @shop_login_required
 @api_view(['GET'])
