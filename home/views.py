@@ -320,6 +320,7 @@ def last_active_collections(request):   #working and tested
         user = jwt_auth.get_user(validated_token)
         
         shop_url = user.shop_url
+        shop_id = user.shop_id
 
         if not shop_url:
             return Response({'error': 'Shop URL not found '}, status=status.HTTP_400_BAD_REQUEST)
@@ -327,7 +328,7 @@ def last_active_collections(request):   #working and tested
         try:
             client = Client.objects.get(shop_url=shop_url)
 
-            collections = ClientCollections.objects.filter(client=client, status=True).order_by('-sort_date')[:5]
+            collections = ClientCollections.objects.filter(shop_id=shop_id, status=True).order_by('-sort_date')[:5]
 
             collections_data = []
             for collection in collections:
@@ -379,6 +380,7 @@ def get_client_collections(request, client_id): #working and tested
         user = jwt_auth.get_user(validated_token)
         
         shop_url = user.shop_url
+        shop_id = user.shop_id
 
         if not shop_url:
             return Response({'error': 'Shop URL not found in session'}, status=status.HTTP_400_BAD_REQUEST)
@@ -389,7 +391,7 @@ def get_client_collections(request, client_id): #working and tested
             if str(client.shop_id) != str(client_id):
                 return Response({'error': 'Client ID mismatch'}, status=status.HTTP_403_FORBIDDEN)
 
-            client_collections = ClientCollections.objects.filter(client=client).order_by('collectionid')
+            client_collections = ClientCollections.objects.filter(shop_id=shop_id).order_by('collectionid')
 
             paginator = ClientCollectionsPagination()
             paginated_collections = paginator.paginate_queryset(client_collections, request)
@@ -432,6 +434,7 @@ def get_last_sorted_time(request, client_id): #working not tested
         user = jwt_auth.get_user(validated_token)
         
         shop_url = user.shop_url  
+        shop_id = user.shop_id
 
         if not shop_url:
             return Response({'error': 'Shop URL not found'}, status=status.HTTP_400_BAD_REQUEST)
@@ -442,7 +445,7 @@ def get_last_sorted_time(request, client_id): #working not tested
             if str(client.shop_id) != str(client_id):
                 return Response({'error': 'Client ID mismatch'}, status=status.HTTP_403_FORBIDDEN)
 
-            latest_usage = Usage.objects.filter(client_id=client_id).order_by('-updated_at').first()
+            latest_usage = Usage.objects.filter(shop_id=shop_id).order_by('-updated_at').first()
 
             if latest_usage:
                 response_data = {
@@ -481,6 +484,7 @@ def search_collections(request, client_id): #working and tested
         user = jwt_auth.get_user(validated_token)
         
         shop_url = user.shop_url  
+        # shop_id = user.shop_id
 
         if not shop_url:
             return Response({'error': 'Shop URL not found'}, status=status.HTTP_400_BAD_REQUEST)
