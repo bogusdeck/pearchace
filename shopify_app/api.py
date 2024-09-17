@@ -63,8 +63,52 @@ def fetch_collections(shop_url):
         return []
 
 
+# def fetch_products_by_collection(shop_url, collection_id):
+#     """
+#     Fetches all products from a specific collection in a Shopify store using the GraphQL API.
+    
+#     Args:
+#         shop_url (str): The URL of the Shopify store.
+#         collection_id (str): The ID of the collection to fetch products from.
+        
+#     Returns:
+#         list: A list of products or an empty list if an error occurs.
+#     """
+#     client = _get_client(shop_url)
+#     if not client:
+#         return []
 
+#     access_token = client.access_token
+#     api_version = apps.get_app_config('shopify_app').SHOPIFY_API_VERSION
+#     headers = _get_shopify_headers(access_token)
 
+#     url = f"https://{shop_url}/admin/api/{api_version}/graphql.json"
+
+#     query = f"""
+#     {{
+#       collection(id: "gid://shopify/Collection/{collection_id}") {{
+#         products(first: 250) {{
+#           edges {{
+#             node {{
+#               id
+#               title
+#               handle
+#             }}
+#           }}
+#         }}
+#       }}
+#     }}
+#     """
+
+#     response = requests.post(url, json={"query": query}, headers=headers)
+#     if response.status_code == 200:
+#         data = response.json()
+#         products = data.get("data", {}).get("collection", {}).get("products", {}).get("edges", [])
+#         return [product['node'] for product in products]
+#     else:
+#         print(f"Error fetching products: {response.status_code} - {response.text}")
+#         return []
+    
 def fetch_products_by_collection(shop_url, collection_id):
     """
     Fetches all products from a specific collection in a Shopify store using the GraphQL API.
@@ -81,7 +125,7 @@ def fetch_products_by_collection(shop_url, collection_id):
         return []
 
     access_token = client.access_token
-    api_version = apps.get_app_config('shopify_app').SHOPIFY_API_VERSION
+    api_version = apps.get_app_config('shopify_app').SHOPIFY_API_VERSION 
     headers = _get_shopify_headers(access_token)
 
     url = f"https://{shop_url}/admin/api/{api_version}/graphql.json"
@@ -95,6 +139,15 @@ def fetch_products_by_collection(shop_url, collection_id):
               id
               title
               handle
+              images(first: 5) {{
+                edges {{
+                  node {{
+                    id
+                    src
+                    altText
+                  }}
+                }}
+              }}
             }}
           }}
         }}
@@ -106,10 +159,19 @@ def fetch_products_by_collection(shop_url, collection_id):
     if response.status_code == 200:
         data = response.json()
         products = data.get("data", {}).get("collection", {}).get("products", {}).get("edges", [])
-        return [product['node'] for product in products]
+        return [
+            {
+                'id': product['node']['id'],
+                'title': product['node']['title'],
+                'handle': product['node']['handle'],
+                'images': [image['node'] for image in product['node'].get('images', {}).get('edges', [])]
+            }
+            for product in products
+        ]
     else:
         print(f"Error fetching products: {response.status_code} - {response.text}")
         return []
+
 
 def _get_client(shop_url):
     """

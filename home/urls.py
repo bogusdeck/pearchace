@@ -1,6 +1,6 @@
 from django.urls import path
 from . import views
-# from billing import initiate_billing, billing_confirmation
+from .billing import initiate_billing, billing_confirmation
 
 urlpatterns = [
     # header 
@@ -15,8 +15,6 @@ urlpatterns = [
     path('api/client-last-sorted-time/<int:client_id>/', views.get_last_sorted_time, name='get_last_sorted_time'),#
     path('api/search-collections/<int:client_id>/', views.search_collections, name='search_collections'),#
     path('api/client-collections/<int:client_id>/', views.get_client_collections, name='client_collections'), #
-    
-
     # path('api/get-client-info/', views.get_client_info, name='get-client-info'),
     # path('api/collections/', views.get_collections, name='collections_list_api'),
     # path('api/products/', views.get_products, name='product_list_api'),
@@ -34,6 +32,6 @@ urlpatterns = [
     path('api/update-default-algo/', views.update_default_algo, name='update-default-algo'),# 
 
     # # Billing urls 
-    # path('api/create_subscription/', initiate_billing, name='create_subscription'),
-    # path('api/billing/confirm/', billing_confirmation, name='billing_confirmation'),
+    path('api/create_subscription/', initiate_billing, name='create_subscription'),
+    path('api/billing/confirm/', billing_confirmation, name='billing_confirmation'),  
 ]

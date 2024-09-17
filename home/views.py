@@ -44,6 +44,12 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import InvalidToken
 
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+
 @shop_login_required
 def index(request):
     try:
@@ -104,7 +110,8 @@ def index(request):
         access_token = str(refresh.access_token)
         refresh_token = str(refresh)
 
-        frontend_url = "https://pearch.vercel.app/"
+        frontend_url = os.environ.get('FRONTEND_URL')
+        print(frontend_url)
         redirect_url = f"{frontend_url}?access_token={access_token}&refresh_token={refresh_token}&shop_url={shop_url}"
 
         return redirect(redirect_url)
@@ -392,7 +399,7 @@ def get_client_collections(request, client_id): #working and tested
                 return Response({'error': 'Client ID mismatch'}, status=status.HTTP_403_FORBIDDEN)
 
             client_collections = ClientCollections.objects.filter(shop_id=shop_id).order_by('collectionid')
-
+    
             paginator = ClientCollectionsPagination()
             paginated_collections = paginator.paginate_queryset(client_collections, request)
 
@@ -762,7 +769,7 @@ def get_and_update_collections(request): #working and tested
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-def get_products(request): # working and tested
+def get_products(request):
     auth_header = request.headers.get('Authorization', None)
     if auth_header is None:
         return Response({'error': 'Authorization header missing'}, status=status.HTTP_401_UNAUTHORIZED)
@@ -781,13 +788,11 @@ def get_products(request): # working and tested
         if not shop_url:
             return Response({'error': 'Shop URL not found in session'}, status=status.HTTP_400_BAD_REQUEST)
 
-    
         collection_id = request.data.get('collection_id')
         if not collection_id:
             return Response({'error': 'Collection ID is required'}, status=status.HTTP_400_BAD_REQUEST)
 
         products = fetch_products_by_collection(shop_url, collection_id)
-
 
         try:
             client_collection = ClientCollections.objects.get(collectionid=collection_id)
@@ -795,7 +800,15 @@ def get_products(request): # working and tested
             return Response({'error': 'Collection not found'}, status=status.HTTP_404_NOT_FOUND)
 
         pinned_products = client_collection.pinned_products or []
-        products_filtered = [product for product in products if product['id'] not in pinned_products]
+        products_filtered = [
+            {
+                'id': product['id'],
+                'title': product['title'],
+                'handle': product['handle'],
+                'images': product.get('images', [])
+            }
+            for product in products if product['id'] not in pinned_products
+        ]
 
         return Response({
             'products': products_filtered,
@@ -807,7 +820,7 @@ def get_products(request): # working and tested
 
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
+    
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -915,7 +928,7 @@ def get_sorting_algorithms(request): # working and tested
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-def update_default_algo(request): # working and tested
+def update_default_algo(request): # working and tested 
     auth_header = request.headers.get('Authorization', None)
     if auth_header is None:
         return Response({'error': 'Authorization header missing'}, status=status.HTTP_401_UNAUTHORIZED)
