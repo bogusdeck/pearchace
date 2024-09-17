@@ -36,5 +36,4 @@ urlpatterns = [
     # Billing urls 
     path('api/create_subscription/', initiate_billing, name='create_subscription'),
     path('api/billing/confirm/', billing_confirmation, name='billing_confirmation'),
-
 ]
