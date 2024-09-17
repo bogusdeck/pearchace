@@ -1,6 +1,6 @@
 from django.urls import path
-
 from . import views
+from billing import initiate_billing, billing_confirmation
 
 urlpatterns = [
     # header 
@@ -25,11 +25,16 @@ urlpatterns = [
     # path('api/shop-info/', views.get_shopify_client_data, name="get_shopify_client_info"),
     path('api/update-collections/<str:collection_id>/', views.update_collection, name='update_collection'),#
     path('api/update-collection-settings/', views.update_collection_settings, name='update-collection-settings'),#
-    path('api/update-global-settings/', views.update_global_settings, name='update-global-settings'),
-    path('api/fetch-sort-date/', views.fetch_last_sort_date, name='fetch-sort-date'),
-    path('api/get-and-update-collections/', views.get_and_update_collections, name='get-and-update-collections'),
-    path('api/get-products/', views.get_products, name='get-products'),
-    path('api/update-pinned-products/', views.update_pinned_products, name='update-pinned-products'),
-    path('api/get-sorting-algorithms/', views.get_sorting_algorithms, name='get-sorting-algorithms'),
-    path('api/update-default-algo/', views.update_default_algo, name='update-default-algo')
+    path('api/update-global-settings/', views.update_global_settings, name='update-global-settings'), #
+    path('api/fetch-sort-date/', views.fetch_last_sort_date, name='fetch-sort-date'),#
+    path('api/get-and-update-collections/', views.get_and_update_collections, name='get-and-update-collections'), # 
+    path('api/get-products/', views.get_products, name='get-products'), #
+    path('api/update-pinned-products/', views.update_pinned_products, name='update-pinned-products'), # 
+    path('api/get-sorting-algorithms/', views.get_sorting_algorithms, name='get-sorting-algorithms'), #
+    path('api/update-default-algo/', views.update_default_algo, name='update-default-algo'),# 
+
+    # Billing urls 
+    path('api/create_subscription/', initiate_billing, name='create_subscription'),
+    path('api/billing/confirm/', billing_confirmation, name='billing_confirmation'),
+
 ]

@@ -663,20 +663,31 @@ def update_global_settings(request): # working and tested
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-@shop_login_required
 @api_view(['GET'])
-def fetch_last_sort_date(request):
-    #GET /api/fetch-sort-date/?collectionid=12345&clientid=1
-    collectionid = request.GET.get('collectionid')
-    clientid = request.GET.get('clientid')
-
-    if not collectionid or not clientid:
-        return Response({'error': 'collectionid and clientid are required'}, status=status.HTTP_400_BAD_REQUEST)
+@permission_classes([IsAuthenticated])
+def fetch_last_sort_date(request): # working and tested
+    auth_header = request.headers.get('Authorization', None)
+    if auth_header is None:
+        return Response({'error': 'Authorization header missing'}, status=status.HTTP_401_UNAUTHORIZED)
 
     try:
-        client = Client.objects.get(id=clientid)
+        token = auth_header.split(' ')[1]
+        jwt_auth = JWTAuthentication()
+        validated_token = jwt_auth.get_validated_token(token)
+        user = jwt_auth.get_user(validated_token)
 
-        collection = ClientCollections.objects.get(collectionid=collectionid, client=client)
+        shop_id = user.shop_id
+        if not shop_id:
+            return Response({'error': 'Shop ID not found in session'}, status=status.HTTP_400_BAD_REQUEST)
+
+        collectionid = request.GET.get('collectionid')
+
+        if not collectionid:
+            return Response({'error': 'collectionid is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        client = Client.objects.get(shop_id=shop_id)
+
+        collection = ClientCollections.objects.get(collectionid=collectionid, shop_id=shop_id)
 
         return Response({
             'collectionid': collection.collectionid,
@@ -693,71 +704,93 @@ def fetch_last_sort_date(request):
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-
-
-@shop_login_required
 @api_view(['POST']) 
-@csrf_protect
-def get_and_update_collections(request):
-    client_id = request.data.get('clientid')
-
-    if not client_id:
-        return Response({'error': 'Client ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+@permission_classes([IsAuthenticated])
+def get_and_update_collections(request): #working and tested
+    auth_header = request.headers.get('Authorization', None)
+    if auth_header is None:
+        return Response({'error': 'Authorization header missing'}, status=status.HTTP_401_UNAUTHORIZED)
 
     try:
-        client = Client.objects.get(id=client_id)
-        access_token = 123 # update this 
+        token = auth_header.split(' ')[1]
+        jwt_auth = JWTAuthentication()
+        validated_token = jwt_auth.get_validated_token(token)
+        user = jwt_auth.get_user(validated_token)
 
-        collections = fetch_collections(client.shop_url,access_token)
+        shop_id = user.shop_id
+        if not shop_id:
+            return Response({'error': 'Shop ID not found'}, status=status.HTTP_400_BAD_REQUEST)
 
-        for collection in collections:
-            collection_data = {
-                'collectionid': collection['id'],
-                'collection_name': collection['title'],
-                'products_count': collection['products_count']
-            }
+        try:
+            client = Client.objects.get(shop_id=shop_id)
 
-            ClientCollections.objects.update_or_create(
-                collectionid=collection_data['collectionid'],
-                client=client,
-                defaults={
-                    'collection_name': collection_data['collection_name'],
-                    'products_count': collection_data['products_count'],
-                    'status': False,  
+            access_token  = client.access_token
+
+            collections = fetch_collections(client.shop_url)
+
+            for collection in collections:
+                collection_data = {
+                    'collectionid': collection['id'].split('/')[-1],  
+                    'collection_name': collection['title'],
+                    'products_count': collection['products_count']
                 }
-            )
 
-        return Response({'message': 'Collections updated successfully'}, status=status.HTTP_200_OK)
+                ClientCollections.objects.update_or_create(
+                    collectionid=collection_data['collectionid'],
+                    shop_id=shop_id,
+                    defaults={
+                        'collection_name': collection_data['collection_name'],
+                        'products_count': collection_data['products_count'],
+                        'status': False,
+                    }
+                )
 
-    except Client.DoesNotExist:
-        return Response({'error': 'Client not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'message': 'Collections updated successfully'}, status=status.HTTP_200_OK)
+
+        except Client.DoesNotExist:
+            return Response({'error': 'Client not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    except InvalidToken:
+        return Response({'error': 'Invalid token'}, status=status.HTTP_401_UNAUTHORIZED)
 
     except Exception as e:
-        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)    
 
-@shop_login_required
-@api_view(['POST'])  
-@csrf_protect
-def get_products(request):
-    shop_url = request.session.get('shopify', {}).get('shop_url')
-    collection_id = request.data.get('collection_id')  
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def get_products(request): # working and tested
+    auth_header = request.headers.get('Authorization', None)
+    if auth_header is None:
+        return Response({'error': 'Authorization header missing'}, status=status.HTTP_401_UNAUTHORIZED)
 
-    if not shop_url:
-        return Response({'error': 'Shop URL not found in session'}, status=status.HTTP_400_BAD_REQUEST)
-    if not collection_id:
-        return Response({'error': 'Collection ID is required'}, status=status.HTTP_400_BAD_REQUEST)
-    
     try:
+        token = auth_header.split(' ')[1]
+        jwt_auth = JWTAuthentication()
+        validated_token = jwt_auth.get_validated_token(token)
+        user = jwt_auth.get_user(validated_token)
+
+        shop_id = user.shop_id
+        if not shop_id:
+            return Response({'error': 'Shop ID not found'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        shop_url = user.shop_url
+        if not shop_url:
+            return Response({'error': 'Shop URL not found in session'}, status=status.HTTP_400_BAD_REQUEST)
+
+    
+        collection_id = request.data.get('collection_id')
+        if not collection_id:
+            return Response({'error': 'Collection ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+
         products = fetch_products_by_collection(shop_url, collection_id)
+
+
         try:
             client_collection = ClientCollections.objects.get(collectionid=collection_id)
         except ClientCollections.DoesNotExist:
             return Response({'error': 'Collection not found'}, status=status.HTTP_404_NOT_FOUND)
 
         pinned_products = client_collection.pinned_products or []
-
-
         products_filtered = [product for product in products if product['id'] not in pinned_products]
 
         return Response({
@@ -765,26 +798,47 @@ def get_products(request):
             'pinned_products': pinned_products
         }, status=status.HTTP_200_OK)
 
+    except InvalidToken:
+        return Response({'error': 'Invalid token'}, status=status.HTTP_401_UNAUTHORIZED)
+
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-@shop_login_required
 @api_view(['POST'])
-@csrf_protect
-def update_pinned_products(request):
-    collection_id = request.data.get('collection_id')
-    pinned_products = request.data.get('pinned_products', [])
+@permission_classes([IsAuthenticated])
+def update_pinned_products(request): # working and tested
 
-    if not collection_id:
-        return Response({'error': 'Collection ID is required'}, status=status.HTTP_400_BAD_REQUEST)
-
-    if not isinstance(pinned_products, list):
-        return Response({'error': 'Pinned products should be a list of product IDs'}, status=status.HTTP_400_BAD_REQUEST)
+    auth_header = request.headers.get('Authorization', None)
+    if auth_header is None:
+        return Response({'error': 'Authorization header missing'}, status=status.HTTP_401_UNAUTHORIZED)
 
     try:
-        
-        client_collection = ClientCollections.objects.get(collectionid=collection_id)
+        token = auth_header.split(' ')[1]
+        jwt_auth = JWTAuthentication()
+        validated_token = jwt_auth.get_validated_token(token)
+        user = jwt_auth.get_user(validated_token)
+
+        shop_id = user.shop_id
+        if not shop_id:
+            return Response({'error': 'Shop ID not found'}, status=status.HTTP_400_BAD_REQUEST)
+
+    
+        collection_id = request.data.get('collection_id')
+        pinned_products = request.data.get('pinned_products', [])
+
+        if not collection_id:
+            return Response({'error': 'Collection ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not isinstance(pinned_products, list):
+            return Response({'error': 'Pinned products should be a list of product IDs'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+        try:
+            client_collection = ClientCollections.objects.get(collectionid=collection_id)
+        except ClientCollections.DoesNotExist:
+            return Response({'error': 'Collection not found'}, status=status.HTTP_404_NOT_FOUND)
+
 
         client_collection.pinned_products = pinned_products
         client_collection.save()
@@ -794,30 +848,44 @@ def update_pinned_products(request):
             'pinned_products': client_collection.pinned_products
         }, status=status.HTTP_200_OK)
 
-    except ClientCollections.DoesNotExist:
-        return Response({'error': 'Collection not found'}, status=status.HTTP_404_NOT_FOUND)
-    
+    except InvalidToken:
+        return Response({'error': 'Invalid token'}, status=status.HTTP_401_UNAUTHORIZED)
+
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
 
-@shop_login_required
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def get_sorting_algorithms(request):
-    # GET /api/get-sorting-algorithms/?client_id=1
-    client_id = request.GET.get('client_id')
-
-    if not client_id:
-        return Response({'error': 'Client ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+    auth_header = request.headers.get('Authorization', None)
+    if auth_header is None:
+        return Response({'error': 'Authorization header missing'}, status=status.HTTP_401_UNAUTHORIZED)
 
     try:
-        client = Client.objects.get(id=client_id)
+        token = auth_header.split(' ')[1]
+        jwt_auth = JWTAuthentication()
+        validated_token = jwt_auth.get_validated_token(token)
+        user = jwt_auth.get_user(validated_token)
+
+        shop_id = user.shop_id
+        if not shop_id:
+            return Response({'error': 'Shop ID not found'}, status=status.HTTP_400_BAD_REQUEST)
+
+        shop_id = request.GET.get('shop_id')
+        if not shop_id:
+            return Response({'error': 'Client ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            client = Client.objects.get(shop_id=shop_id)
+        except Client.DoesNotExist:
+            return Response({'error': 'Client not found'}, status=status.HTTP_404_NOT_FOUND)
+
         default_algo = client.default_algo
 
         algorithms = SortingAlgorithm.objects.all()
 
         algo_data = []
-
         for algo in algorithms:
             collections_count = ClientCollections.objects.filter(algo_id=algo.algo_id).count()
 
@@ -834,40 +902,56 @@ def get_sorting_algorithms(request):
             'algorithms': algo_data
         }, status=status.HTTP_200_OK)
 
-    except Client.DoesNotExist:
-        return Response({'error': 'Client not found'}, status=status.HTTP_404_NOT_FOUND)
+    except InvalidToken:
+        return Response({'error': 'Invalid token'}, status=status.HTTP_401_UNAUTHORIZED)
+
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
 
-@shop_login_required
 @api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def update_default_algo(request):
-    client_id = request.data.get('client_id')
-    algo_id = request.data.get('algo_id')
-
-    if not client_id or not algo_id:
-        return Response({'error': 'Client ID and Algorithm ID are required'}, status=status.HTTP_400_BAD_REQUEST)
+    auth_header = request.headers.get('Authorization', None)
+    if auth_header is None:
+        return Response({'error': 'Authorization header missing'}, status=status.HTTP_401_UNAUTHORIZED)
 
     try:
+        token = auth_header.split(' ')[1]
+        jwt_auth = JWTAuthentication()
+        validated_token = jwt_auth.get_validated_token(token)
+        user = jwt_auth.get_user(validated_token)
 
-        client = Client.objects.get(id=client_id)
+        shop_id = user.shop_id
+        if not shop_id:
+            return Response({'error': 'Shop ID not found'}, status=status.HTTP_400_BAD_REQUEST)
 
-        algo = SortingAlgorithm.objects.get(algo_id=algo_id)
+        shop_id = request.data.get('shop_id')
+        algo_id = request.data.get('algo_id')
 
-        client.default_algo = algo_id
+        if not shop_id or not algo_id:
+            return Response({'error': 'Client ID and Algorithm ID are required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            client = Client.objects.get(shop_id=shop_id)
+        except Client.DoesNotExist:
+            return Response({'error': 'Client not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            algo = SortingAlgorithm.objects.get(algo_id=algo_id)
+        except SortingAlgorithm.DoesNotExist:
+            return Response({'error': 'Sorting algorithm not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        client.default_algo = algo
         client.save()
 
         return Response({
             'message': 'Default algorithm updated successfully',
-            'default_algo': client.default_algo
+            'default_algo': algo.algo_id
         }, status=status.HTTP_200_OK)
 
-    except Client.DoesNotExist:
-        return Response({'error': 'Client not found'}, status=status.HTTP_404_NOT_FOUND)
-
-    except SortingAlgorithm.DoesNotExist:
-        return Response({'error': 'Sorting algorithm not found'}, status=status.HTTP_404_NOT_FOUND)
+    except InvalidToken:
+        return Response({'error': 'Invalid token'}, status=status.HTTP_401_UNAUTHORIZED)
 
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
