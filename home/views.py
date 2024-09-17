@@ -861,7 +861,7 @@ def update_pinned_products(request): # working and tested
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def get_sorting_algorithms(request):
+def get_sorting_algorithms(request): # working and tested
     auth_header = request.headers.get('Authorization', None)
     if auth_header is None:
         return Response({'error': 'Authorization header missing'}, status=status.HTTP_401_UNAUTHORIZED)
@@ -915,7 +915,7 @@ def get_sorting_algorithms(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-def update_default_algo(request):
+def update_default_algo(request): # working and tested
     auth_header = request.headers.get('Authorization', None)
     if auth_header is None:
         return Response({'error': 'Authorization header missing'}, status=status.HTTP_401_UNAUTHORIZED)
