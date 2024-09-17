@@ -1,6 +1,6 @@
 from django.urls import path
 from . import views
-from .billing import initiate_billing, billing_confirmation
+from .billing import create_billing_plan, confirm_billing, handle_app_uninstall
 
 urlpatterns = [
     # header 
@@ -32,6 +32,9 @@ urlpatterns = [
     path('api/update-default-algo/', views.update_default_algo, name='update-default-algo'),# 
 
     # # Billing urls 
-    path('api/create_subscription/', initiate_billing, name='create_subscription'),
-    path('api/billing/confirm/', billing_confirmation, name='billing_confirmation'),  
+    # path('api/create_subscription/', initiate_billing, name='create_subscription'),
+    # path('api/billing/confirm/', billing_confirmation, name='billing_confirmation'),  
+    path('api/billing/create/', create_billing_plan, name='create_billing_plan'),
+    path('api/billing/confirm/', confirm_billing, name='confirm_billing'),
+    path('api/billing/uninstall/', handle_app_uninstall, name='handle_app_uninstall'),
 ]

@@ -12,6 +12,12 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
 from .models import Client
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+
 
 def _new_session(shop_url):
     api_version = apps.get_app_config('shopify_app').SHOPIFY_API_VERSION
@@ -23,7 +29,7 @@ def login(request):
         return JsonResponse({'error': 'Shop URL parameter is required'}, status=400)
 
     scope = apps.get_app_config('shopify_app').SHOPIFY_API_SCOPE
-    ngrok_url = 'https://6700-3-108-104-68.ngrok-free.app/'
+    ngrok_url = os.environ.get('BACKEND_URL')
     redirect_uri = f"{ngrok_url}{reverse('finalize')}".replace('p//', 'p/')   
     # redirect_uri = request.build_absolute_uri(reverse('finalize'))
     state = binascii.b2a_hex(os.urandom(15)).decode("utf-8")

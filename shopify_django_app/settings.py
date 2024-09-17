@@ -44,11 +44,12 @@ MIDDLEWARE = [
 ROOT_URLCONF = 'shopify_django_app.urls'
 
 CORS_ALLOW_ALL_ORIGINS = True
-
+ 
 CORS_ALLOWED_ORIGINS = [
     'http://3.108.104.68:80',
     'https://pearch.vercel.app',
-    'http://localhost:80'
+    'http://localhost:80',
+    'https://b175-49-249-156-158.ngrok-free.app'
 ]
 
 CORS_ALLOW_CREDENTIALS = True
@@ -66,7 +67,6 @@ CORS_ALLOW_HEADERS = [
     'authorization',
     'content-type',
 ]
-
 
 TEMPLATES = [
     {
