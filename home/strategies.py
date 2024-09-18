@@ -7,14 +7,6 @@ def promote_new(products, days: int):
     new_products = [p for p in products if p['listed_date'] >= time_threshold]
     return sorted(new_products, key=lambda x: x['listed_date'], reverse=True)
 
-# def promote_high_revenue_products(products, days: int, percentile: int):
-#     # Sorts products so that those in the top percentile of 
-#     time_threshold = datetime.now() - timedelta(days=days)    
-#     recent_products = [p for p in products if p['listed_date'] >= time_threshold]    
-#     sorted_by_revenue = sorted(recent_products, key=lambda x: x['revenue'], reverse=True)    
-#     top_percent_index = max(1, len(sorted_by_revenue) * percentile // 100)    
-#     return sorted_by_revenue[:top_percent_index]
-
 
 def promote_high_revenue_products(products, days: int, percentile: int):
 # Sorts products so that those in the top `percentile` of revenue within the last `days` come first,  

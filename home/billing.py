@@ -83,7 +83,6 @@ def activate_recurring_charge(shop_url, access_token, charge_id):
         return False
 
 def cancel_active_recurring_charges(shop_url, access_token):
-    # Initialize a Shopify session
     shopify.Session.setup(api_key=os.environ.get('SHOPIFY_API_KEY'), secret=os.environ.get('SHOPIFY_API_SECRET'))
     session = shopify.Session(shop_url, os.environ.get('SHOPIFY_API_VERSION'), access_token)
     shopify.ShopifyResource.activate_session(session)
@@ -92,15 +91,17 @@ def cancel_active_recurring_charges(shop_url, access_token):
     active_charges = shopify.RecurringApplicationCharge.find(status='active')
     for charge in active_charges:
         charge.cancel()
+    
+    client = Client.objects.get(shop_url=shop_url)
+    shop_id = client.shop_id
 
-    # Update subscription status in the local database
-    subscription = Subscription.objects.filter(shop_id=shop_url, status='active').first()
+    subscription = Subscription.objects.filter(shop_id=shop_id, status='active').first()
     if subscription:
         subscription.status = 'cancelled'
         subscription.cancelled_at = timezone.now()
         subscription.save()
 
-# Views for Billing Management
+
 # View to create a billing plan and redirect for confirmation
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -192,6 +193,8 @@ def confirm_billing(request):
 
 
 # App Uninstall Webhook to handle charge cancellation
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 @csrf_exempt
 def handle_app_uninstall(request):
     auth_header = request.headers.get('Authorization', None)
@@ -216,25 +219,21 @@ def handle_app_uninstall(request):
         # client = Client.objects.get(shop_id=shop_id)
         # access_token = client.access_token   
         cancel_active_recurring_charges(shop_url, access_token)
-        return JsonResponse({'status': 'App uninstall handled successfully'}, status=200)
+        return Response({'status': 'App uninstall handled successfully'}, status=200)
         
     except InvalidToken:
         return Response({'error': 'Invalid token'}, status=status.HTTP_401_UNAUTHORIZED)
     except Exception as e:
-        return Response({'error': str(e)}, status=400)
+        return Response({'errorr': str(e)}, status=400)
 
     
-
-# Helper Functions
 def get_selected_plan(request):
-    """Retrieve the selected plan from the request (customize as needed)."""
     plan_id = request.GET.get('plan_id')
     print("chl rha hu mai")
     return SortingPlan.objects.get(plan_id=plan_id)
 
 
 def get_access_token(shop_url):
-    """Function to retrieve the shop's access token from your database."""
     client = Client.objects.get(shop_url=shop_url)
     print("me running")
     return client.access_token
