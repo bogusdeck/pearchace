@@ -562,6 +562,7 @@ def fetch_client_data(shop_url, access_token):
 #     except Exception as e:
 #         print(f"Exception during product order update: {str(e)}")
 #         return False
+
 def update_collection_products_order(
       shop_url, access_token, collection_id, sorted_product_ids
   ):
@@ -600,21 +601,20 @@ def update_collection_products_order(
           print("working till now")
           moves = [
               {
-                  "id": product_id,
+                  "id": f"gid://shopify/Product/{product_id}",
                   "newPosition": str(position),  
               }
               for position, product_id in enumerate(sorted_product_ids)
           ]
 
+          print(moves)
           print("working till now 2")
-
-
           variables = {"id": collection_global_id, "moves": moves}
           print("working till now 3")
-
           response = requests.post(
               url, json={"query": mutation, "variables": variables}, headers=headers
           )
+
           print(response.json())
           if response.status_code == 200:
               result = response.json()

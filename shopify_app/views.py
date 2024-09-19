@@ -8,10 +8,11 @@ import hmac, base64, hashlib, binascii, os
 import shopify
 from .decorators import shop_login_required
 from datetime import datetime  
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework import status
-from .models import Client
+from rest_framework.permissions import AllowAny
+from .models import Client, ClientCollections
 import os
 from dotenv import load_dotenv
 
@@ -96,3 +97,74 @@ def logout(request):
             return Response({'error': 'Client does not exist'}, status=status.HTTP_404_NOT_FOUND)
     else:
         return Response({'error': 'Not logged in'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+
+
+
+
+# mandatory webhooks
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def customer_data_request(request):
+    email = request.data.get('email')
+    
+    if not email:
+        return Response({'error': 'Email is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        client = Client.objects.get(email=email)
+        client_data = {
+            'shop_name': client.shop_name,
+            'email': client.email,
+            'phone_number': client.phone_number,
+            'shop_url': client.shop_url,
+            'country': client.country,
+            'currency': client.currency,
+            'billingAddress': client.billingAddress,
+            'created_at': client.created_at,
+            'updated_at': client.updated_at,
+        }
+
+        return Response(client_data, status=status.HTTP_200_OK)
+    except Client.DoesNotExist:
+        return Response({'error': 'Client not found'}, status=status.HTTP_404_NOT_FOUND)
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def customer_data_erasure(request):
+    email = request.data.get('email')
+
+    if not email:
+        return Response({'error': 'Email is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        client = Client.objects.get(email=email)
+        # ClientCollections.objects.filter(shop_id=client.shop_id).delete()  
+        # client.delete()  
+        if client:
+            return Response({'message': 'Customer data erased successfully'}, status=status.HTTP_200_OK)
+        else: 
+            return Response({'message': 'Customer data Not found'}, status= status.HTTP_400_BAD_REQUEST)
+
+    except Client.DoesNotExist:
+        return Response({'error': 'Client not found'}, status=status.HTTP_404_NOT_FOUND)
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def shop_data_erasure(request):
+    shop_id = request.data.get('shop_id')
+
+    if not shop_id:
+        return Response({'error': 'Shop ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        # ClientCollections.objects.filter(shop_id=shop_id).delete()
+        if ClientCollections.objects.filter(shop_id=shop_id):
+            return Response({'message': 'Shop data erased successfully'}, status=status.HTTP_200_OK)
+        else: 
+            return Response({'message': 'Shop data Not found'}, status= status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

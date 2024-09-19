@@ -215,7 +215,6 @@ def get_client_info(request):  # working and tested
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
 # @api_view(['GET'])
 # @csrf_protect
 # def get_collections(request):
@@ -323,9 +322,11 @@ def update_product_order(request):
         pinned_product_ids = client_collections.pinned_products
 
         # days = parameters_used.get("days", 7)
-        days = 7
-        percentile = parameters_used.get("percentile", 10)
-        variant_threshold = parameters_used.get("variant_threshold", 5.0)
+        days = None
+        # percentile = parameters_used.get("percentile", 10)
+        percentile = None
+        # variant_threshold = parameters_used.get("variant_threshold", 5.0)
+        variant_threshold = None
 
         products = fetch_products_by_collection(client.shop_url, collection_id, days)
 
@@ -348,6 +349,8 @@ def update_product_order(request):
         if sorted_product_ids:
             print("product hai sorted wale")
 
+        print(sorted_product_ids)
+
         print("0")
         # print("pinned product array", pinned_product_ids)
         # print("before pin product at top:",sorted_product_ids)
@@ -356,6 +359,7 @@ def update_product_order(request):
                 sorted_product_ids, pinned_product_ids
             )
 
+        print(sorted_product_ids)
         # print("after pin product at top:",sorted_product_ids)    
         if client_collections.pinned_out_of_stock_down:
             print("1")
@@ -363,12 +367,15 @@ def update_product_order(request):
                 sorted_product_ids, pinned_product_ids
             )
 
+        print(sorted_product_ids)
         if client_collections.out_of_stock_down:
             print("2")
             sorted_product_ids = push_out_of_stock_down(sorted_product_ids, pinned_product_ids)
 
 
-        pid = lambda sorted_product_ids: [int(sorted_product_id['id']) for sorted_product_id in sorted_product_ids]    
+        print("sorted_products_id:",sorted_product_ids)
+        pid = pid_extractor(sorted_product_ids)
+        print(pid)
         print("4")
         success = update_collection_products_order(
             client.shop_url, access_token, collection_id, pid
@@ -387,6 +394,9 @@ def update_product_order(request):
     except Exception as e:
         return Response({"errore": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
+def pid_extractor(products):
+    return [int(product['id']) for product in products]
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -1330,3 +1340,6 @@ def update_default_algo(request):  # working and tested
 
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
