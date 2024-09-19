@@ -34,20 +34,22 @@ def decimal_to_float(data):
     return data
 
 # Shopify Billing Logic
-def create_recurring_charge(shop_url, access_token, plan):
+def create_recurring_charge(shop_url, access_token, plan_id):
     shopify.Session.setup(api_key=os.environ.get('SHOPIFY_API_KEY'), secret=os.environ.get('SHOPIFY_API_SECRET'))
     session = shopify.Session(shop_url, os.environ.get('SHOPIFY_API_VERSION'), access_token)
     shopify.ShopifyResource.activate_session(session)
     
-    plan_name = str(plan.name) if plan.name is not None else "Unknown Plan"
-    plan_price = float(plan.cost_month) if plan.cost_month is not None else 0.0
-    
+
+    plan = SortingPlan.objects.get(plan_id=plan_id)
+    plan_name = plan.name
+    plan_price = plan.cost_month
+
     charge = shopify.RecurringApplicationCharge({
         "name": plan_name,
         "price": plan_price,
         "test": True,
         "trial_days": 14,
-        "return_url": "https://your-app-url.com/api/billing/confirm/",
+        "return_url": "https://pearch.vercel.app",
         "terms": "Your plan description here"
     })
 
@@ -129,13 +131,12 @@ def create_billing_plan(request):
             if not plan_id:
                 return JsonResponse({'error': 'Plan ID is missing'}, status=400)
 
-            plan = SortingPlan.objects.get(plan_id=plan_id)
             access_token = client.access_token
 
             if not shop_id or not access_token:
                 return JsonResponse({'error': 'Shop id or access token is missing'}, status=400)
 
-            billing_url = create_recurring_charge(shop_url, access_token, plan)
+            billing_url = create_recurring_charge(shop_url, access_token, plan_id)
             return redirect(billing_url)
         except Client.DoesNotExist:
             return Response({'error': 'Client not found'}, status=status.HTTP_404_NOT_FOUND)

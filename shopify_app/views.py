@@ -17,18 +17,18 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-
-
 def _new_session(shop_url):
     api_version = apps.get_app_config('shopify_app').SHOPIFY_API_VERSION
     return shopify.Session(shop_url, api_version)
 
 def login(request):
     shop_url = request.GET.get('shop')
+    print(shop_url)
     if not shop_url:
         return JsonResponse({'error': 'Shop URL parameter is required'}, status=400)
 
     scope = apps.get_app_config('shopify_app').SHOPIFY_API_SCOPE
+    print(scope)
     ngrok_url = os.environ.get('BACKEND_URL')
     redirect_uri = f"{ngrok_url}{reverse('finalize')}".replace('p//', 'p/')   
     # redirect_uri = request.build_absolute_uri(reverse('finalize'))
@@ -55,8 +55,16 @@ def finalize(request):
 
     try:
         shop_url = params.get('shop')
+        if not shop_url:
+            return JsonResponse({'error': 'Missing shop URL'}, status=400)
+        
         session = _new_session(shop_url)
         access_token = session.request_token(request.GET)
+
+        if not access_token:
+            return JsonResponse({'error': 'Failed to obtain access token'}, status=500)
+
+        print('data:', shop_url, access_token)
 
         request.session['shopify'] = {
             "shop_url": shop_url,

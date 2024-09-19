@@ -62,6 +62,10 @@ class Client(AbstractBaseUser):
         default='daily'
     )
 
+    custom_start_time = models.TimeField(blank=True, null=True) 
+    custom_stop_time = models.TimeField(blank=True, null=True)  
+    custom_frequency_in_hours = models.IntegerField(blank=True, null=True) 
+
     STOCK_LOCATION_CHOICES = [
         ('all', 'All Locations'),
         ('online', 'Online Locations'),
@@ -119,6 +123,13 @@ class SortingAlgorithm(models.Model):
     def __str__(self):
         return self.name
 
+def default_parameters_used():
+    return {
+        "days": 7,
+        "percentile": None,
+        "variant_threshold": None
+    }
+
 #done
 class ClientCollections(models.Model):
     id = models.BigAutoField(primary_key=True)
@@ -131,7 +142,7 @@ class ClientCollections(models.Model):
     sort_date = models.DateTimeField(null=True, blank=True)
     pinned_products = models.JSONField(blank=True, null=True)
     algo = models.ForeignKey('SortingAlgorithm', on_delete=models.CASCADE, null=True, blank=True)
-    parameters_used = models.JSONField(default=dict)
+    parameters_used = models.JSONField(default=default_parameters_used)
     updated_at = models.DateTimeField(auto_now=True)
     out_of_stock_down = models.BooleanField(default=False)
     pinned_out_of_stock_down = models.BooleanField(default=False)
@@ -143,7 +154,7 @@ class ClientCollections(models.Model):
 
     def __str__(self):
         return f"{self.collection_name} (ID: {self.collectionid}) for shop_id {self.shop_id} - Sorted on {self.sort_date}"
-
+    
 #done
 class Subscription(models.Model):
     subscription_id = models.AutoField(primary_key=True)

@@ -25,5 +25,5 @@ class ShopifyAppConfig(AppConfig):
 
     # See http://api.shopify.com/authentication.html for available scopes
     # to determine the permisssions your app will need.
-    SHOPIFY_API_SCOPE = os.environ.get('SHOPIFY_API_SCOPE', 'write_products,read_products').split(',')
+    SHOPIFY_API_SCOPE = os.environ.get('SHOPIFY_API_SCOPE', 'write_products,read_products,read_orders').split(',')
 
