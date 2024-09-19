@@ -105,7 +105,6 @@ def logout(request):
 
 
 # mandatory webhooks
-
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def customer_data_request(request):
