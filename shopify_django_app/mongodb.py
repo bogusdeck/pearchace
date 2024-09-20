@@ -4,6 +4,7 @@ from pymongo import MongoClient
 from django.conf import settings
 from django.http import JsonResponse
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -68,5 +69,5 @@ def status_list(request):
         status_collection = db.status_fd  
         status_data = list(status_collection.find({}, {'_id': 0}))  
         return JsonResponse(status_data, safe=False)
-    except PyMongoError as e:
+    except PyMongoError as e:   
         return JsonResponse({'error': str(e)}, status=500)
