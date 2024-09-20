@@ -169,7 +169,7 @@ def shop_data_erasure(request):
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
 
-from shopify_django_app.mongodb import get_mongo_client()
+from shopify_django_app.mongodb import get_mongo_client
 from pymongo.errors import PyMongoError
 
 @api_view(['GET'])
