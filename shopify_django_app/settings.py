@@ -103,7 +103,7 @@ DATABASES = {
 # user= pearchuser , name=pearchdb , password = PearchTest@123 , host=db , port = 5432 
 
 MONGODB_SETTINGS = {
-    'db': 'shopify_app_faqs', 
+    'db': 'shopify_app', 
     'host': 'mongodb://pearch:pearchpwd@3.108.104.68:27017/shopify_app',
     'authSource': 'admin',   
 }
