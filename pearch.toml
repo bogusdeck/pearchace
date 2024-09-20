@@ -1,0 +1,26 @@
+name = "Pearch: Collection Sort"
+client_id = "fb016ebe4318fb7b928a8e265bbcb30e"
+application_url = "https://devbackend.pearch.com"
+embedded = false
+handle = "pearch-collection-sort"
+
+[access_scopes]
+scopes = "read_orders,read_products,read_shopify_store,read_all_orders,write_orders,write_products"
+
+
+[auth]
+redirect_urls = [
+  "https://devbackend.pearchace.com/auth/finalize/",
+]
+
+[webhooks]
+api_version = "2024-07"
+
+[[webhooks.subscriptions]]
+topics = [ "app/uninstalled" ]
+compliance_topics = [ "customers/redact", "customers/data_request", "shop/redact" ]
+uri = "/auth/webhooks"   
+
+[pos]
+embedded = false
+
