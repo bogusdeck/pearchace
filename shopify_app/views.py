@@ -167,3 +167,14 @@ def shop_data_erasure(request):
             return Response({'message': 'Shop data Not found'}, status= status.HTTP_400_BAD_REQUEST)
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+
+
+
+from django.http import JsonResponse
+from .mongo_client import get_all_faqs
+
+@api_view(['POST'])
+def faq_list(request):
+    faqs = get_all_faqs()
+    return JsonResponse(faqs, safe=False)

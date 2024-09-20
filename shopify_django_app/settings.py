@@ -102,6 +102,13 @@ DATABASES = {
 # user=postgres.bcwssspjpeskbbzvhvex password=[YOUR-PASSWORD] host=aws-0-us-east-1.pooler.supabase.com port=6543 dbname=postgres
 # user= pearchuser , name=pearchdb , password = PearchTest@123 , host=db , port = 5432 
 
+MONGODB_SETTINGS = {
+    'db': 'shopify_app_faqs', 
+    'host': 'mongodb://3.108.104.68:27017', 
+    'username': 'faq_user',  
+    'password': 'faq_password',  
+    'authSource': 'admin',  
+}
 
 AUTH_PASSWORD_VALIDATORS = [
     {

@@ -11,4 +11,7 @@ urlpatterns = [
     path('webhooks/customer-data-request/', customer_data_request, name='customer-data-request'),
     path('webhooks/customer-data-erasure/', customer_data_erasure, name='customer-data-erasure'),
     path('webhooks/shop-data-erasure/', shop_data_erasure, name='shop-data-erasure'),
+
+    # FAQs
+    path('faqs/', views.faq_list, name='faq_list'),
 ]
