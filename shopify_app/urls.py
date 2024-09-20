@@ -14,4 +14,5 @@ urlpatterns = [
 
     # FAQs
     path('faqs/', views.faq_list, name='faq_list'),
+    path('test-mongodb/', views.test_mongodb_connection,name='test_mongo'),
 ]

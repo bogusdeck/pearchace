@@ -185,3 +185,29 @@ def faq_list(request):
 
    
 
+import pymongo
+from django.http import JsonResponse
+
+def test_mongodb_connection(request):
+    try:
+        # Replace with your MongoDB connection details
+        client = pymongo.MongoClient("mongodb://pearch:pearchpwd@3.108.104.68:27017/?authSource=admin")
+        
+        # Select the database
+        db = client['shopify_app']
+
+        # Perform a test query
+        collection = db['your_collection_name']  # Replace with an actual collection name
+        document = collection.find_one()
+
+        # Return the document as a response
+        return JsonResponse({
+            'status': 'success',
+            'data': document
+        })
+
+    except pymongo.errors.PyMongoError as e:
+        return JsonResponse({
+            'status': 'error',
+            'error': str(e)
+        }, status=500)
