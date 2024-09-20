@@ -172,9 +172,9 @@ def shop_data_erasure(request):
 
 
 from django.http import JsonResponse
-from .mongodb import get_all_faqs
+from shopify_django_app.mongodb import get_all_faqs
 
-@api_view(['POST'])
+@api_view(['GET'])
 def faq_list(request):
     faqs = get_all_faqs()
     return JsonResponse(faqs, safe=False)
