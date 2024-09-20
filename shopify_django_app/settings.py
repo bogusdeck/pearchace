@@ -104,7 +104,7 @@ DATABASES = {
 
 MONGODB_SETTINGS = {
     'db': 'shopify_app_faqs', 
-    'host': 'mongodb://faq_user:faq_password@3.108.104.68:27017/shopify_app',
+    'host': 'mongodb://pearch:pearchpwd@3.108.104.68:27017/shopify_app',
     'authSource': 'admin',   
 }
 

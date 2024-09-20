@@ -16,18 +16,22 @@
 from pymongo import MongoClient
 from django.conf import settings
 
-client = MongoClient(settings.MONGODB_SETTINGS['host'])
-db = client[settings.MONGODB_SETTINGS['db']]
-faqs_collection = db.faqs  
+# client = MongoClient(settings.MONGODB_SETTINGS['host'])
+# db = client[settings.MONGODB_SETTINGS['db']]
+# faqs_collection = db.faqs  
 
 
-def get_all_faqs():
-    return list(faqs_collection.find())
+def get_mongo_client():
+    client = MongoClient(settings.MONGODB_SETTINGS['host'])
+    return client[settings.MONGODB_SETTINGS['db']]
+
+# def get_all_faqs():
+#     return list(faqs_collection.find())
 
 
-def update_faq(faq_id, question, answer):
-    result = faqs_collection.update_one(
-        {'_id': faq_id},
-        {'$set': {'question': question, 'answer': answer}}
-    )
-    return result.modified_count  
+# def update_faq(faq_id, question, answer):
+#     result = faqs_collection.update_one(
+#         {'_id': faq_id},
+#         {'$set': {'question': question, 'answer': answer}}
+#     )
+#     return result.modified_count  
