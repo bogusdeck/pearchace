@@ -5,7 +5,7 @@ embedded = false
 handle = "pearch-collection-sort"
 
 [access_scopes]
-scopes = "read_orders,read_products,read_shopify_store,read_all_orders,write_orders,write_products"
+scopes = "read_orders,read_products,write_orders,write_products"
 
 
 [auth]
