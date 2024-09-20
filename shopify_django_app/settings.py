@@ -105,7 +105,6 @@ DATABASES = {
 MONGODB_SETTINGS = {
     'db': 'shopify_app', 
     'host': 'mongodb://pearch:pearchpwd@3.108.104.68:27017/shopify_app?authSource=admin'
-    # 'authSource': 'admin',   
 }
 
 AUTH_PASSWORD_VALIDATORS = [

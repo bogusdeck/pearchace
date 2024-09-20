@@ -1,37 +1,39 @@
-# from pymongo import MongoClient
-# from django.conf import settings
-
-# def get_mongo_db():
-#     client = MongoClient(
-#         host=settings.MONGODB_SETTINGS['host'],
-#         username=settings.MONGODB_SETTINGS.get('username'),
-#         password=settings.MONGODB_SETTINGS.get('password'),
-#         authSource=settings.MONGODB_SETTINGS.get('authSource', 'admin')
-#     )
-#     return client[settings.MONGODB_SETTINGS['db']]
-
-
-
-# mongo_client.py
+import pymongo
+from pymongo.errors import PyMongoError
 from pymongo import MongoClient
 from django.conf import settings
+from django.http import JsonResponse
+from rest_framework.decorators import api_view
 
-# client = MongoClient(settings.MONGODB_SETTINGS['host'])
-# db = client[settings.MONGODB_SETTINGS['db']]
-# faqs_collection = db.faqs  
-
+@api_view(['GET'])
+def faq_list(request):
+    try:
+        db = get_mongo_client()
+        faqs_collection = db.faqs 
+        faqs = list(faqs_collection.find({}, {'_id': 0})) 
+        return JsonResponse(faqs, safe=False)
+    except PyMongoError as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 def get_mongo_client():
     client = MongoClient(settings.MONGODB_SETTINGS['host'])
     return client[settings.MONGODB_SETTINGS['db']]
+   
+@api_view(['GET'])
+def test_mongodb_connection(request):
+    try:
+        client = pymongo.MongoClient("mongodb://pearch:pearchpwd@3.108.104.68:27017/?authSource=admin")
+        
+        db = client['shopify_app']
+        collection = db['your_collection_name']  
+        document = collection.find_one()
+        return JsonResponse({
+            'status': 'success',
+            'data': document
+        })
 
-# def get_all_faqs():
-#     return list(faqs_collection.find())
-
-
-# def update_faq(faq_id, question, answer):
-#     result = faqs_collection.update_one(
-#         {'_id': faq_id},
-#         {'$set': {'question': question, 'answer': answer}}
-#     )
-#     return result.modified_count  
+    except pymongo.errors.PyMongoError as e:
+        return JsonResponse({
+            'status': 'error',
+            'error': str(e)
+        }, status=500)

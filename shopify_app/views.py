@@ -169,45 +169,4 @@ def shop_data_erasure(request):
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
 
-from shopify_django_app.mongodb import get_mongo_client
-from pymongo.errors import PyMongoError
 
-@api_view(['GET'])
-def faq_list(request):
-    try:
-        db = get_mongo_client()
-        faqs_collection = db.faqs 
-        faqs = list(faqs_collection.find({}, {'_id': 0})) 
-        return JsonResponse(faqs, safe=False)
-    except PyMongoError as e:
-        return JsonResponse({'error': str(e)}, status=500)
-
-
-   
-
-import pymongo
-from django.http import JsonResponse
-
-def test_mongodb_connection(request):
-    try:
-        # Replace with your MongoDB connection details
-        client = pymongo.MongoClient("mongodb://pearch:pearchpwd@3.108.104.68:27017/?authSource=admin")
-        
-        # Select the database
-        db = client['shopify_app']
-
-        # Perform a test query
-        collection = db['your_collection_name']  # Replace with an actual collection name
-        document = collection.find_one()
-
-        # Return the document as a response
-        return JsonResponse({
-            'status': 'success',
-            'data': document
-        })
-
-    except pymongo.errors.PyMongoError as e:
-        return JsonResponse({
-            'status': 'error',
-            'error': str(e)
-        }, status=500)

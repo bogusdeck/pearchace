@@ -1,6 +1,8 @@
 from django.urls import path
 from . import views
 from .views import customer_data_request, customer_data_erasure, shop_data_erasure
+from shopify_django_app.mongodb import faq_list, test_mongodb_connection
+
 
 urlpatterns = [
     path('login/', views.login, name='login'),
@@ -13,6 +15,6 @@ urlpatterns = [
     path('webhooks/shop-data-erasure/', shop_data_erasure, name='shop-data-erasure'),
 
     # FAQs
-    path('faqs/', views.faq_list, name='faq_list'),
-    path('test-mongodb/', views.test_mongodb_connection,name='test_mongo'),
+    path('faqs/', faq_list, name='faq_list'),
+    path('test-mongodb/', test_mongodb_connection,name='test_mongo'),
 ]
