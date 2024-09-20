@@ -17,8 +17,8 @@ from pymongo import MongoClient
 from django.conf import settings
 
 client = MongoClient(settings.MONGODB_SETTINGS['host'])
-db = client.shopify_app  # Change to your database name
-faqs_collection = db.faqs  # Change to your collection name
+db = client[settings.MONGODB_SETTINGS['db']]
+faqs_collection = db.faqs  
 
 
 def get_all_faqs():
