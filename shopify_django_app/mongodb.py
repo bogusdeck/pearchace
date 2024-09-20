@@ -37,3 +37,14 @@ def test_mongodb_connection(request):
             'status': 'error',
             'error': str(e)
         }, status=500)
+
+
+@api_view(['GET'])
+def status_list(request):
+    try:
+        db = get_mongo_client()
+        status_collection = db.status_fd  
+        status_data = list(status_collection.find({}, {'_id': 0}))  
+        return JsonResponse(status_data, safe=False)
+    except PyMongoError as e:
+        return JsonResponse({'error': str(e)}, status=500)
