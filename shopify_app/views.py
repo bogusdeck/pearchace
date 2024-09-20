@@ -172,7 +172,7 @@ def shop_data_erasure(request):
 
 
 from django.http import JsonResponse
-from .mongo_client import get_all_faqs
+from .mongodb import get_all_faqs
 
 @api_view(['POST'])
 def faq_list(request):
