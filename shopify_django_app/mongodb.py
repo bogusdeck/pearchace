@@ -3,9 +3,10 @@ from pymongo.errors import PyMongoError
 from pymongo import MongoClient
 from django.conf import settings
 from django.http import JsonResponse
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def faq_list(request):
     try:
         db = get_mongo_client()
@@ -40,8 +41,29 @@ def test_mongodb_connection(request):
 
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def status_list(request):
+    auth_header = request.headers.get("Authorization", None)
+    if auth_header is None:
+        return Response(
+            {"error": "Authorization header missing"},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
     try:
+        token = auth_header.split(" ")[1]
+        jwt_auth = JWTAuthentication()
+
+        validated_token = jwt_auth.get_validated_token(token)
+        user = jwt_auth.get_user(validated_token)
+
+        shop_id = user.shop_id
+        if not shop_id:
+            return Response(
+                {"error": "Shop ID not found in session"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+
         db = get_mongo_client()
         status_collection = db.status_fd  
         status_data = list(status_collection.find({}, {'_id': 0}))  
