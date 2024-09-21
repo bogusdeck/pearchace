@@ -31,11 +31,10 @@ def test_mongodb_connection(request):
         client = pymongo.MongoClient("mongodb://pearch:pearchpwd@3.108.104.68:27017/?authSource=admin")
         
         db = client['shopify_app']
-        collection = db['your_collection_name']  
-        document = collection.find_one()
+        collections = db.list_collection_names()
         return JsonResponse({
             'status': 'success',
-            'data': document
+            'data': collections
         })
 
     except pymongo.errors.PyMongoError as e:
