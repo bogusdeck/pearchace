@@ -22,5 +22,5 @@ RUN pip install --upgrade pip && pip install -r /app/requirements.txt
 # Copy the application code into the Docker container
 COPY . /app/
 
-# Command to run Gunicorn, pointing to your Django project’s WSGI application
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "shopify_django_app.wsgi:application"]
+# Command to run Gunicorn or the Django dev server
+CMD ["gunicorn", "--bind", "0.0.0.0:8001", "shopify_django_app.wsgi:application"]
