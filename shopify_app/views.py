@@ -103,7 +103,6 @@ def logout(request):
 
 
 
-
 # mandatory webhooks
 @api_view(['POST'])
 @permission_classes([AllowAny])
