@@ -255,7 +255,7 @@ def fetch_products_by_collection(shop_url, collection_id, days):
                 "listed_date": product["node"]["createdAt"],  
                 "revenue": calculate_revenue(shop_url, product["node"]["id"], days, headers),  
                 "variants_count": product["node"]["variantsCount"]["count"],
-                # "variant_availability": sum(variant["node"]["inventoryQuantity"] for variant in product["node"]["variants"]["edges"]), 
+                "variant_availability": sum(variant["node"]["inventoryQuantity"] for variant in product["node"]["variants"]["edges"]), 
                 # "variants_precision": product["node"]["variantsCount"]["count"],  
             }
             for product in products
