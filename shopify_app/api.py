@@ -8,21 +8,10 @@ import pytz
 from django.utils import timezone
 from datetime import datetime, timedelta
 
-
 def _get_shopify_headers(access_token):
     return {"Content-Type": "application/json", "X-Shopify-Access-Token": access_token}
 
-
 def fetch_collections(shop_url):
-    """
-    Fetches all collections from a Shopify store using the GraphQL API.
-
-    Args:
-        shop_url (str): The URL of the Shopify store.
-
-    Returns:
-        list: A list of collections with id, title, and products_count.
-    """
     client = _get_client(shop_url)
     if not client:
         return []
@@ -32,87 +21,54 @@ def fetch_collections(shop_url):
     headers = _get_shopify_headers(access_token)
 
     url = f"https://{shop_url}/admin/api/{api_version}/graphql.json"
+    collections = []
+    has_next_page = True
+    cursor = None
 
-    query = """
-    {
-      collections(first: 250) {
-        edges {
-          node {
-            id
-            title
-            productsCount {
-              count
-              precision
+    while has_next_page:
+        query = """
+        query($after: String) {
+            collections(first: 250, after: $after) {
+                edges {
+                    cursor
+                    node {
+                        id
+                        title
+                        productsCount {
+                            count
+                        }
+                    }
+                }
+                pageInfo {
+                    hasNextPage
+                }
             }
-          }
         }
-      }
-    }
-    """
+        """
 
-    response = requests.post(url, json={"query": query}, headers=headers)
-    if response.status_code == 200:
-        data = response.json()
-        collections = data.get("data", {}).get("collections", {}).get("edges", [])
-        return [
-            {
-                "id": collection["node"]["id"],
-                "title": collection["node"]["title"],
-                "products_count": collection["node"]["productsCount"]["count"],
-            }
-            for collection in collections
-        ]
-    else:
-        print(f"Error fetching collections: {response.status_code} - {response.text}")
-        return []
+        variables = {"after": cursor} if cursor else {}
+        response = requests.post(url, json={"query": query, "variables": variables}, headers=headers)
 
+        if response.status_code == 200:
+            data = response.json()
+            new_collections = data.get("data", {}).get("collections", {}).get("edges", [])
+            collections.extend(new_collections)
+            page_info = data.get("data", {}).get("collections", {}).get("pageInfo", {})
+            has_next_page = page_info.get("hasNextPage", False)
+            if has_next_page:
+                cursor = new_collections[-1]["cursor"]
+        else:
+            print(f"Error fetching collections: {response.status_code} - {response.text}")
+            break
 
-# def fetch_products_by_collection(shop_url, collection_id):
-#     """
-#     Fetches all products from a specific collection in a Shopify store using the GraphQL API.
-
-#     Args:
-#         shop_url (str): The URL of the Shopify store.
-#         collection_id (str): The ID of the collection to fetch products from.
-
-#     Returns:
-#         list: A list of products or an empty list if an error occurs.
-#     """
-#     client = _get_client(shop_url)
-#     if not client:
-#         return []
-
-#     access_token = client.access_token
-#     api_version = apps.get_app_config('shopify_app').SHOPIFY_API_VERSION
-#     headers = _get_shopify_headers(access_token)
-
-#     url = f"https://{shop_url}/admin/api/{api_version}/graphql.json"
-
-#     query = f"""
-#     {{
-#       collection(id: "gid://shopify/Collection/{collection_id}") {{
-#         products(first: 250) {{
-#           edges {{
-#             node {{
-#               id
-#               title
-#               handle
-#             }}
-#           }}
-#         }}
-#       }}
-#     }}
-#     """
-
-#     response = requests.post(url, json={"query": query}, headers=headers)
-#     if response.status_code == 200:
-#         data = response.json()
-#         products = data.get("data", {}).get("collection", {}).get("products", {}).get("edges", [])
-#         return [product['node'] for product in products]
-#     else:
-#         print(f"Error fetching products: {response.status_code} - {response.text}")
-#         return []
-
+    return [
+        {
+            "id": collection["node"]["id"],
+            "title": collection["node"]["title"],
+            "products_count": collection["node"]["productsCount"]["count"],
+        }
+        for collection in collections
+    ]
 
 def fetch_products_by_collection_with_img(shop_url, collection_id):
     """
@@ -186,7 +142,6 @@ def fetch_products_by_collection_with_img(shop_url, collection_id):
         print(f"Error fetching products: {response.status_code} - {response.text}")
         return []
 
-
 def fetch_products_by_collection(shop_url, collection_id, days):
     client = _get_client(shop_url)
     if not client:
@@ -197,164 +152,159 @@ def fetch_products_by_collection(shop_url, collection_id, days):
     headers = _get_shopify_headers(access_token)
 
     url = f"https://{shop_url}/admin/api/{api_version}/graphql.json"
+    products = []
+    has_next_page = True
+    cursor = None
 
-    query = f"""
-    {{
-      collection(id: "gid://shopify/Collection/{collection_id}") {{
-        products(first: 250) {{
-          edges {{
-            node {{
-              id
-              title
-              handle
-              totalInventory
-              publishedAt
-              variantsCount {{  
-                count
-              }}
-              variants(first: 10) {{
-                edges {{
-                  node {{
-                    id
-                    price
-                    inventoryQuantity
-                  }}
+    while has_next_page:
+        query = f"""
+        query($after: String) {{
+            collection(id: "gid://shopify/Collection/{collection_id}") {{
+                products(first: 250, after: $after) {{
+                    edges {{
+                        cursor
+                        node {{
+                            id
+                            title
+                            handle
+                            totalInventory
+                            createdAt
+                            variantsCount {{  
+                                count
+                            }}
+                            variants(first: 10) {{
+                                edges {{
+                                    node {{
+                                        id
+                                        price
+                                        inventoryQuantity
+                                    }}
+                                }}
+                            }}
+                        }}
+                    }}
+                    pageInfo {{
+                        hasNextPage
+                    }}
                 }}
-              }}
-              createdAt 
             }}
-          }}
         }}
-      }}
-    }}
-    """
+        """
 
-    response = requests.post(url, json={"query": query}, headers=headers)
+        variables = {"after": cursor} if cursor else {}
+        response = requests.post(url, json={"query": query, "variables": variables}, headers=headers)
 
-    if response.status_code == 200:
-        data = response.json()
+        if response.status_code == 200:
+            data = response.json()
+            new_products = (
+                data.get("data", {})
+                .get("collection", {})
+                .get("products", {})
+                .get("edges", [])
+            )
+            products.extend(new_products)
+            page_info = (
+                data.get("data", {})
+                .get("collection", {})
+                .get("products", {})
+                .get("pageInfo", {})
+            )
+            has_next_page = page_info.get("hasNextPage", False)
+            if has_next_page:
+                cursor = new_products[-1]["cursor"]
+        else:
+            print(f"Error fetching products: {response.status_code} - {response.text}")
+            break
 
-        products = (
-            data.get("data", {})
-            .get("collection", {})
-            .get("products", {})
-            .get("edges", [])
-        )
-
-        if not products:
-            print("No products found in the collection.")
-            return []
-
-        return [
-            {
-                "id": product["node"]["id"].split("/")[-1],  
-                "title": product["node"]["title"],
-                "handle": product["node"]["handle"],
-                "totalInventory":product["node"]["totalInventory"],
-                # "publishedAt":product["node"]["publishedAt"],
-                "listed_date": product["node"]["createdAt"],  
-                "revenue": calculate_revenue(shop_url, product["node"]["id"], days, headers),  
-                "variants_count": product["node"]["variantsCount"]["count"],
-                "variant_availability": sum(variant["node"]["inventoryQuantity"] for variant in product["node"]["variants"]["edges"]), 
-                # "variants_precision": product["node"]["variantsCount"]["count"],  
-            }
-            for product in products
-        ]
-    else:
-        print(f"Error fetching products: {response.status_code} - {response.text}")
-        return []
+    return [
+        {
+            "id": product["node"]["id"].split("/")[-1],
+            "title": product["node"]["title"],
+            "handle": product["node"]["handle"],
+            "totalInventory": product["node"]["totalInventory"],
+            "listed_date": product["node"]["createdAt"],
+            "revenue": calculate_revenue(shop_url, product["node"]["id"], days, headers),
+            "variants_count": product["node"]["variantsCount"]["count"],
+            "variant_availability": sum(
+                variant["node"]["inventoryQuantity"]
+                for variant in product["node"]["variants"]["edges"]
+            ),
+        }
+        for product in products
+    ]
 
 def calculate_revenue(shop_url, product_id, days, headers):
     """
     Fetches the total revenue generated by sales of the product (based on order data)
-    over the specified number of days.
+    over the specified number of days, with pagination.
     """
-    # Define the GraphQL query to fetch orders for the given product
     api_version = apps.get_app_config("shopify_app").SHOPIFY_API_VERSION
+    has_next_page = True
+    after_cursor = None
+    total_revenue = 0
 
-    query = f"""
-    {{
-      orders(first: 250, query: "created_at:>={days} days ago") {{
-        edges {{
-          node {{
-            lineItems(first: 100) {{
-              edges {{
-                node {{
-                  productId
-                  variantId
-                  quantity
-                  originalUnitPriceSet {{
-                    shopMoney {{
-                      amount
+    while has_next_page:
+        pagination_query = f', after: "{after_cursor}"' if after_cursor else ""
+        query = f"""
+        {{
+          orders(first: 250, query: "created_at:>={days} days ago"{pagination_query}) {{
+            edges {{
+              cursor
+              node {{
+                lineItems(first: 100) {{
+                  edges {{
+                    node {{
+                      productId
+                      variantId
+                      quantity
+                      originalUnitPriceSet {{
+                        shopMoney {{
+                          amount
+                        }}
+                      }}
                     }}
                   }}
                 }}
               }}
             }}
+            pageInfo {{
+              hasNextPage
+            }}
           }}
         }}
-      }}
-    }}
-    """
-    
-    url = f"https://{shop_url}/admin/api/{api_version}/graphql.json"
-    response = requests.post(url, json={"query": query}, headers=headers)
+        """
 
-    if response.status_code != 200:
-        print(f"Error fetching orders: {response.status_code} - {response.text}")
-        return 0
+        url = f"https://{shop_url}/admin/api/{api_version}/graphql.json"
+        response = requests.post(url, json={"query": query}, headers=headers)
 
-    orders_data = response.json().get("data", {}).get("orders", {}).get("edges", [])
+        if response.status_code != 200:
+            print(f"Error fetching orders: {response.status_code} - {response.text}")
+            return 0
 
-    total_revenue = 0
+        orders_data = response.json().get("data", {}).get("orders", {})
+        has_next_page = orders_data.get("pageInfo", {}).get("hasNextPage", False)
 
-    for order in orders_data:
-        line_items = order["node"]["lineItems"]["edges"]
+        for order in orders_data.get("edges", []):
+            line_items = order["node"]["lineItems"]["edges"]
+            after_cursor = order["cursor"]
 
-        for item in line_items:
-            if item["node"]["productId"] == f"gid://shopify/Product/{product_id}":
-                price = float(item["node"]["originalUnitPriceSet"]["shopMoney"]["amount"])
-                quantity = int(item["node"]["quantity"])
-                total_revenue += price * quantity
+            for item in line_items:
+                if item["node"]["productId"] == f"gid://shopify/Product/{product_id}":
+                    price = float(item["node"]["originalUnitPriceSet"]["shopMoney"]["amount"])
+                    quantity = int(item["node"]["quantity"])
+                    total_revenue += price * quantity
 
     return total_revenue
-
-
-# def calculate_revenue(variants):
-#     """
-#     Calculate total revenue for the product based on its variants.
-#     Args:
-#         variants (list): List of product variants.
-#     Returns:
-#         float: Total revenue for the product.
-#     """
-#     total_revenue = 0
-#     for variant in variants:
-#         if variant["inventoryQuantity"] > 0:
-#             total_revenue += float(variant["price"]) * variant["inventoryQuantity"]
-    
-#     print("revenue calculate done")
-#     return total_revenue
-
- # "sales_velocity": calculate_sales_velocity(shop_url, product["node"]["id"], days) ,  
+ 
 def calculate_sales_velocity(shop_url, product_id, days):
     """
-    Calculate the product's sales velocity based on total sold units over a specified number of days using Shopify's GraphQL API.
-    
-    Args:
-        shop_url (str): The URL of the Shopify store.
-        product_id (str): The ID of the product (in the format gid://shopify/Product/{product_id}).
-        days (int): The number of days to calculate sales velocity for.
-    
-    Returns:
-        float: Average sales velocity per day for the product.
+    Calculate the product's sales velocity based on total sold units over a specified number of days using Shopify's GraphQL API with pagination.
     """
     if days <= 0:
         return 0
 
     end_date = timezone.now()
     start_date = end_date - timedelta(days=days)
-
     client = _get_client(shop_url)
     if not client:
         return 0
@@ -362,76 +312,61 @@ def calculate_sales_velocity(shop_url, product_id, days):
     access_token = client.access_token
     api_version = apps.get_app_config("shopify_app").SHOPIFY_API_VERSION
     headers = _get_shopify_headers(access_token)
-    print(access_token)
 
     url = f"https://{shop_url}/admin/api/{api_version}/graphql.json"
 
     start_date_iso = start_date.isoformat()
     end_date_iso = end_date.isoformat()
 
-    query = f"""
-    {{
-      orders(first: 250, query: "created_at:>{start_date_iso} AND created_at:<{end_date_iso}") {{
-        edges {{
-          node {{
-            lineItems(first: 250) {{
-              edges {{
-                node {{
-                  product {{
-                    id  
+    total_sold_units = 0
+    has_next_page = True
+    after_cursor = None
+
+    while has_next_page:
+        pagination_query = f', after: "{after_cursor}"' if after_cursor else ""
+        query = f"""
+        {{
+          orders(first: 250, query: "created_at:>{start_date_iso} AND created_at:<{end_date_iso}"{pagination_query}) {{
+            edges {{
+              cursor
+              node {{
+                lineItems(first: 250) {{
+                  edges {{
+                    node {{
+                      product {{
+                        id  
+                      }}
+                      quantity
+                    }}
                   }}
-                  quantity
                 }}
               }}
             }}
+            pageInfo {{
+              hasNextPage
+            }}
           }}
         }}
-      }}
-    }}
-    """
+        """
 
-    # query = """
-    # {
-    #   orders(first: 1) {
-    #       edges {
-    #         node {
-    #           id
-    #           lineItems(first: 1) {
-    #             edges {
-    #               node {
-    #                 title
-    #                 quantity
-    #               }
-    #             }
-    #           }
-    #         }
-    #       }
-    #     }
-    #   }
-    # """
+        response = requests.post(url, json={"query": query}, headers=headers)
 
-    response = requests.post(url, json={"query": query}, headers=headers)
+        if response.status_code != 200:
+            print(f"Error fetching orders: {response.status_code} - {response.text}")
+            return 0
 
-    print(response.json())
+        data = response.json().get("data", {}).get("orders", {})
+        has_next_page = data.get("pageInfo", {}).get("hasNextPage", False)
 
-    if response.status_code == 200:
-        data = response.json()
-        orders = data.get("data", {}).get("orders", {}).get("edges", [])
+        for order in data.get("edges", []):
+            after_cursor = order["cursor"]
 
-        total_sold_units = 0
-
-        for order in orders:
             for line_item in order["node"]["lineItems"]["edges"]:
                 if line_item["node"]["product"]["id"] == f"gid://shopify/Product/{product_id}":
                     total_sold_units += int(line_item["node"]["quantity"])
 
-        sales_velocity = total_sold_units / days if days > 0 else 0
-        print('sales_velocity done')
-        return sales_velocity
-    else:
-        print(f"Error fetching orders: {response.status_code} - {response.text}")
-        return 0
-
+    sales_velocity = total_sold_units / days if days > 0 else 0
+    return sales_velocity
 
 def _get_client(shop_url):
     """
@@ -448,7 +383,6 @@ def _get_client(shop_url):
     except Client.DoesNotExist:
         print(f"Client with shop URL {shop_url} does not exist.")
         return None
-
 
 def fetch_client_data(shop_url, access_token):
     """
@@ -505,63 +439,6 @@ def fetch_client_data(shop_url, access_token):
     else:
         print(f"Error fetching shop data: {response.status_code} - {response.text}")
         return {}
-
-
-# def update_collection_products_order(shop_url, collection_id, sorted_product_ids, access_token):
-#     """
-#     Updates the product order of a collection in Shopify.
-
-#     Args:
-#         shop_url (str): The Shopify store URL.  
-#         collection_id (str): The ID of the collection to update.
-#         sorted_product_ids (list): A list of product IDs in the desired order.
-
-#     Returns:
-#         bool: True if the update is successful, False otherwise.
-#     """
-#     try:
-#         api_version = apps.get_app_config('shopify_app').SHOPIFY_API_VERSION
-#         # access_token = request.session.get('shopify', {}).get('access_token')
-#         headers = _get_shopify_headers(access_token)
-#         url = f"https://{shop_url}/admin/api/{api_version}/graphql.json"
-
-#         # GraphQL mutation for updating collection order
-#         mutation = """
-#         mutation updateProductOrder($collectionId: ID!, $productIds: [ID!]!) {
-#             collectionReorderProducts(collectionId: $collectionId, moves: {
-#                 newPosition: 1,
-#                 productId: $productIds
-#             }) {
-#                 userErrors {
-#                     field
-#                     message
-#                 }
-#             }
-#         }
-#         """
-
-#         variables = {
-#             "collectionId": f"gid://shopify/Collection/{collection_id}",
-#             "productIds": [f"gid://shopify/Product/{pid}" for pid in sorted_product_ids]
-#         }
-
-#         response = requests.post(url, json={"query": mutation, "variables": variables}, headers=headers)
-#         if response.status_code == 200:
-#             result = response.json()
-#             print(f"Response JSON: {result}")
-#             errors = result.get('data', {}).get('collectionReorderProducts', {}).get('userErrors', [])
-#             if not errors:
-#                 return True
-#             else:
-#                 print(f"User errors: {errors}")
-#         else:
-#             print(f"Failed to reorder products: {response.status_code} - {response.text}")
-#         return False
-
-
-#     except Exception as e:
-#         print(f"Exception during product order update: {str(e)}")
-#         return False
 
 def update_collection_products_order(
       shop_url, access_token, collection_id, sorted_product_ids

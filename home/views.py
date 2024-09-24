@@ -64,7 +64,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-
 @shop_login_required
 def index(request):
     try:
