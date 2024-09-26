@@ -29,4 +29,5 @@ ENV PYTHONUNBUFFERED=1
 EXPOSE 8001
 
 # Run Django development server and Celery worker
-CMD ["sh", "-c", "python manage.py migrate && python manage.py runserver 0.0.0.0:8001 & celery -A shopify_django_app worker --loglevel=info"]
+# CMD ["sh", "-c", "python manage.py migrate && python manage.py runserver 0.0.0.0:8001 & celery -A shopify_django_app worker --loglevel=info"]
+CMD ["sh", "-c", "python manage.py migrate && python manage.py runserver 0.0.0.0:8001"]
