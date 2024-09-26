@@ -13,3 +13,6 @@ psycopg2
 django-cors-headers
 djangorestframework-simplejwt
 python-dateutil
+pymongo
+celery 
+redis

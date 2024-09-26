@@ -64,7 +64,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-
 @shop_login_required
 def index(request):
     try:
@@ -322,9 +321,9 @@ def update_product_order(request):
         pinned_product_ids = client_collections.pinned_products
 
         # days = parameters_used.get("days", 7)
-        days = None
+        days = 7    
         # percentile = parameters_used.get("percentile", 10)
-        percentile = None
+        percentile = 100
         # variant_threshold = parameters_used.get("variant_threshold", 5.0)
         variant_threshold = None
 
@@ -367,13 +366,13 @@ def update_product_order(request):
                 sorted_product_ids, pinned_product_ids
             )
 
-        print(sorted_product_ids)
+        # print(sorted_product_ids)
         if client_collections.out_of_stock_down:
             print("2")
             sorted_product_ids = push_out_of_stock_down(sorted_product_ids, pinned_product_ids)
 
 
-        print("sorted_products_id:",sorted_product_ids)
+        # print("sorted_products_id:",sorted_product_ids)
         pid = pid_extractor(sorted_product_ids)
         print(pid)
         print("4")

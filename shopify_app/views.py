@@ -36,6 +36,7 @@ def login(request):
     state = binascii.b2a_hex(os.urandom(15)).decode("utf-8")
     request.session['shopify_oauth_state_param'] = state
     permission_url = _new_session(shop_url).create_permission_url(scope, redirect_uri, state)
+    print(permission_url)
     return redirect(permission_url)
 
 def finalize(request):
@@ -97,7 +98,6 @@ def logout(request):
             return Response({'error': 'Client does not exist'}, status=status.HTTP_404_NOT_FOUND)
     else:
         return Response({'error': 'Not logged in'}, status=status.HTTP_400_BAD_REQUEST)
-
 
 
 
@@ -167,3 +167,6 @@ def shop_data_erasure(request):
             return Response({'message': 'Shop data Not found'}, status= status.HTTP_400_BAD_REQUEST)
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+
+

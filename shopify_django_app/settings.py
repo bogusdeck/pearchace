@@ -102,6 +102,10 @@ DATABASES = {
 # user=postgres.bcwssspjpeskbbzvhvex password=[YOUR-PASSWORD] host=aws-0-us-east-1.pooler.supabase.com port=6543 dbname=postgres
 # user= pearchuser , name=pearchdb , password = PearchTest@123 , host=db , port = 5432 
 
+MONGODB_SETTINGS = {
+    'db': 'shopify_app', 
+    'host': 'mongodb+srv://pearch:pearchpwd@cluster0.6sbdzti.mongodb.net/'
+}
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -117,6 +121,11 @@ AUTH_PASSWORD_VALIDATORS = [
         'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
     },
 ]
+
+# # Celery settings
+# CELERY_BROKER_URL = 'redis://redis:6379/0'
+# CELERY_ACCEPT_CONTENT = ['json']
+# CELERY_TASK_SERIALIZER = 'json'
 
 AUTH_USER_MODEL = 'shopify_app.Client'
 

@@ -22,14 +22,12 @@ def promote_new(products, days: int = None, percentile: int = 100, variant_thres
     
     top_percent_index = max(1, len(sorted_new_products) * (percentile or 100) // 100)
     
-    return [{'id': p['id'], 'listed_date': p['listed_date']} for p in sorted_new_products[:top_percent_index]]
-
+    return sorted_new_products[:top_percent_index]
 
 
 def promote_high_revenue_products(products, days: int = None, percentile: int = 100, variant_threshold: float = 0.0):
     if days is not None:
         time_threshold = datetime.now(pytz.utc) - timedelta(days=days)
-
         recent_products = [
             p for p in products 
             if isinstance(p, dict) and 'listed_date' in p and 'revenue' in p and 'id' in p and
@@ -46,7 +44,7 @@ def promote_high_revenue_products(products, days: int = None, percentile: int = 
 
     reordered_products = sorted(products, key=lambda p: p['id'] not in top_product_ids)
 
-    return [{'id': p['id'], 'listed_date': p['listed_date']} for p in reordered_products]
+    return reordered_products[:top_percent_index]
 
 
 def promote_high_inventory_products(products, days: int = None, percentile: int = 100, variant_threshold: float = 0.0):
@@ -67,7 +65,7 @@ def promote_high_inventory_products(products, days: int = None, percentile: int 
     bottom_product_ids = {p['id'] for p in bottom_products}
 
     reordered_products = sorted(products, key=lambda p: p['id'] not in bottom_product_ids)
-    return [{'id': p['id'], 'listed_date': p['listed_date']} for p in reordered_products]
+    return reordered_products[:bottom_percent_index]
 
 
 def bestsellers_high_variant_availability(products, days: int = None, percentile: int = 100, variant_threshold: float = 0.0):
@@ -92,7 +90,7 @@ def bestsellers_high_variant_availability(products, days: int = None, percentile
     top_product_ids = {p['id'] for p in top_products}
 
     reordered_products = sorted(products, key=lambda p: p['id'] not in top_product_ids)
-    return [{'id': p['id'], 'listed_date': p['listed_date']} for p in reordered_products]
+    return reordered_products[:top_percent_index]
 
 
 def promote_high_variant_availability(products, days: int = None, percentile: int = 100, variant_threshold: float = 0.0):
@@ -103,7 +101,7 @@ def promote_high_variant_availability(products, days: int = None, percentile: in
     high_variant_ids = {p['id'] for p in high_variant_products}
 
     reordered_products = sorted(products, key=lambda p: p['id'] not in high_variant_ids)
-    return [{'id': p['id'], 'listed_date': p['listed_date']} for p in reordered_products]
+    return reordered_products[:len(high_variant_products)]
 
 
 def clearance_sale(products, days: int = None, percentile: int = 100, variant_threshold: float = 0.0):
@@ -119,7 +117,7 @@ def clearance_sale(products, days: int = None, percentile: int = 100, variant_th
     low_sales_velocity_ids = {p['id'] for p in low_sales_velocity_products}
 
     reordered_products = sorted(products, key=lambda p: p['id'] not in low_sales_velocity_ids)
-    return [{'id': p['id'], 'listed_date': p['listed_date']} for p in reordered_products]
+    return reordered_products[:bottom_percentile_index]
 
 
 def promote_high_revenue_new_products(products, days: int = None, percentile: int = 100, variant_threshold: float = 0.0):
@@ -135,7 +133,7 @@ def promote_high_revenue_new_products(products, days: int = None, percentile: in
     top_revenue_new_product_ids = {p['id'] for p in top_revenue_new_products}
 
     reordered_products = sorted(products, key=lambda p: p['id'] not in top_revenue_new_product_ids)
-    return [{'id': p['id'], 'listed_date': p['listed_date']} for p in reordered_products]
+    return reordered_products[:top_percentile_index]
 
 
 # def push_pinned_products_to_top(products, pinned_product_ids):
