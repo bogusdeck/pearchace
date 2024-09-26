@@ -1,26 +1,32 @@
+# Base image
 FROM python:3.10-slim
+
+# Set the working directory inside the container
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libpq-dev \
+    gettext \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy the requirements file and install dependencies
+COPY requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
+
+# Install Celery and Redis (used for asynchronous tasks)
+RUN pip install celery[redis]
+
+# Copy the Django project files into the container
+COPY . /app
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# Set the working directory inside the Docker container
-WORKDIR /app
+# Expose the Django dev server port
+EXPOSE 8001
 
-# Install required system packages
-RUN apt-get update && apt-get install -y \
-    gcc \
-    libpq-dev \
-    python3-dev \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy the requirements file and install Python dependencies
-COPY requirements.txt /app/
-RUN pip install --upgrade pip && pip install -r /app/requirements.txt
-
-# Copy the application code into the Docker container
-COPY . /app/
-
-# Command to run Gunicorn or the Django dev server
-CMD ["gunicorn", "--bind", "0.0.0.0:8001", "shopify_django_app.wsgi:application"]
+# Run Django development server and Celery worker
+CMD ["sh", "-c", "python manage.py migrate && python manage.py runserver 0.0.0.0:8001 & celery -A shopify_django_app worker --loglevel=info"]

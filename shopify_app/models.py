@@ -210,3 +210,24 @@ class PlanHistory(models.Model):
     def __str__(self):
         return f"Plan History {self.id} for {self.client.shop_name}"
     
+
+class ClientProducts(models.Model):
+    product_id = models.BigIntegerField(primary_key=True)  
+    shop_id = models.ForeignKey('Client', on_delete=models.CASCADE)
+    collection_id = models.ForeignKey('ClientCollections', on_delete=models.CASCADE)
+    title = models.CharField(max_length=255)  
+    published_at = models.DateTimeField(null=True, blank=True)  
+    variant_count = models.IntegerField(default=0)  
+    revenue_generation = models.DecimalField(max_digits=15, decimal_places=2, default=0)  
+    total_inventory = models.IntegerField(default=0)  
+    sales_velocity = models.DecimalField(max_digits=10, decimal_places=2, default=0)  
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('shop_id', 'collection_id', 'product_id')  
+
+    def __str__(self):
+        return f"Product {self.title} (ID: {self.product_id}) in Collection {self.collection_id} for shop {self.shop_id}"
+

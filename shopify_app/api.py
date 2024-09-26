@@ -100,7 +100,6 @@ def fetch_products_by_collection_with_img(shop_url, collection_id):
             node {{
               id
               title
-              handle
               images(first: 5) {{
                 edges {{
                   node {{
@@ -166,7 +165,6 @@ def fetch_products_by_collection(shop_url, collection_id, days):
                         node {{
                             id
                             title
-                            handle
                             totalInventory
                             createdAt
                             variantsCount {{  
@@ -220,7 +218,7 @@ def fetch_products_by_collection(shop_url, collection_id, days):
         {
             "id": product["node"]["id"].split("/")[-1],
             "title": product["node"]["title"],
-            "handle": product["node"]["handle"],
+            # "handle": product["node"]["handle"],
             "totalInventory": product["node"]["totalInventory"],
             "listed_date": product["node"]["createdAt"],
             "revenue": calculate_revenue(shop_url, product["node"]["id"], days, headers),
@@ -254,8 +252,12 @@ def calculate_revenue(shop_url, product_id, days, headers):
                 lineItems(first: 100) {{
                   edges {{
                     node {{
-                      productId
-                      variantId
+                      variant {{
+                        id
+                        product {{
+                          id
+                        }}
+                      }}
                       quantity
                       originalUnitPriceSet {{
                         shopMoney {{
@@ -277,6 +279,7 @@ def calculate_revenue(shop_url, product_id, days, headers):
         url = f"https://{shop_url}/admin/api/{api_version}/graphql.json"
         response = requests.post(url, json={"query": query}, headers=headers)
 
+        print("response", response.json())
         if response.status_code != 200:
             print(f"Error fetching orders: {response.status_code} - {response.text}")
             return 0
@@ -289,12 +292,14 @@ def calculate_revenue(shop_url, product_id, days, headers):
             after_cursor = order["cursor"]
 
             for item in line_items:
-                if item["node"]["productId"] == f"gid://shopify/Product/{product_id}":
+                # Check if the product ID matches
+                if item["node"]["variant"]["product"]["id"] == f"gid://shopify/Product/{product_id}":
                     price = float(item["node"]["originalUnitPriceSet"]["shopMoney"]["amount"])
                     quantity = int(item["node"]["quantity"])
                     total_revenue += price * quantity
 
     return total_revenue
+
  
 def calculate_sales_velocity(shop_url, product_id, days):
     """
