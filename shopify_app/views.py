@@ -36,8 +36,8 @@ def login(request):
     state = binascii.b2a_hex(os.urandom(15)).decode("utf-8")
     request.session['shopify_oauth_state_param'] = state
     permission_url = _new_session(shop_url).create_permission_url(scope, redirect_uri, state)
-    print(permission_url)
-    return redirect(permission_url)
+    print("permission_url", permission_url)
+    return redirect(permission_url) 
 
 def finalize(request):
     """
@@ -46,6 +46,9 @@ def finalize(request):
     api_secret = apps.get_app_config('shopify_app').SHOPIFY_API_SECRET
     params = request.GET.dict()
 
+    print("shopify given state" ,request.session.get('shopify_oauth_state_param'))
+    print("\n")
+    print("my state", params.get('state'))
     if request.session.get('shopify_oauth_state_param') != params.get('state'):
         return JsonResponse({'error': 'Invalid state parameter'}, status=400)
 
@@ -98,8 +101,6 @@ def logout(request):
             return Response({'error': 'Client does not exist'}, status=status.HTTP_404_NOT_FOUND)
     else:
         return Response({'error': 'Not logged in'}, status=status.HTTP_400_BAD_REQUEST)
-
-
 
 
 
