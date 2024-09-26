@@ -36,6 +36,7 @@ def login(request):
     state = binascii.b2a_hex(os.urandom(15)).decode("utf-8")
     request.session['shopify_oauth_state_param'] = state
     permission_url = _new_session(shop_url).create_permission_url(scope, redirect_uri, state)
+    print(permission_url)
     return redirect(permission_url)
 
 def finalize(request):
