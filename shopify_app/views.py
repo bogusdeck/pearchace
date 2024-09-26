@@ -11,6 +11,8 @@ from datetime import datetime
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework_simplejwt.exceptions import InvalidToken
+from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.permissions import AllowAny
 from .models import Client, ClientCollections
 import os
@@ -36,8 +38,8 @@ def login(request):
     state = binascii.b2a_hex(os.urandom(15)).decode("utf-8")
     request.session['shopify_oauth_state_param'] = state
     permission_url = _new_session(shop_url).create_permission_url(scope, redirect_uri, state)
-    print(permission_url)
-    return redirect(permission_url)
+    print("permission_url", permission_url)
+    return redirect(permission_url) 
 
 def finalize(request):
     """
@@ -46,6 +48,9 @@ def finalize(request):
     api_secret = apps.get_app_config('shopify_app').SHOPIFY_API_SECRET
     params = request.GET.dict()
 
+    print("shopify given state" ,request.session.get('shopify_oauth_state_param'))
+    print("\n")
+    print("my state", params.get('state'))
     if request.session.get('shopify_oauth_state_param') != params.get('state'):
         return JsonResponse({'error': 'Invalid state parameter'}, status=400)
 
@@ -100,7 +105,66 @@ def logout(request):
         return Response({'error': 'Not logged in'}, status=status.HTTP_400_BAD_REQUEST)
 
 
+import requests
+from django.http import JsonResponse
+from django.conf import settings
+from .models import Client  
+from rest_framework.permissions import IsAuthenticated
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def check_scopes(request):
+    try:
+        auth_header = request.headers.get("Authorization", None)
+        if auth_header is None:
+            return Response(
+                {"error": "Authorization header missing"},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        token = auth_header.split(" ")[1]
+        jwt_auth = JWTAuthentication()
+        validated_token = jwt_auth.get_validated_token(token)
+        user = jwt_auth.get_user(validated_token)
+
+        shop_url = user.shop_url
+        if not shop_url:
+            return JsonResponse({"error": "Shop URL not provided"}, status=400)
+        
+        print("working")
+    
+        try:
+            client = Client.objects.get(shop_url=shop_url)
+            print("client", client)
+            access_token = client.access_token  
+            print("access_token", access_token)
+            scopes_url = f"https://{shop_url}/admin/oauth/access_scopes.json"
+            headers = {
+                "X-Shopify-Access-Token": access_token
+            }
+
+            print("client info and headers setup")
+
+            response = requests.get(scopes_url, headers=headers)
+
+            print("got the response")
+            response_data = response.json()
+            print("response_data")
+            print(response.json())
+
+            if response.status_code == 200:
+                return JsonResponse({"scopes": response_data.get("access_scopes", [])}, status=200)
+            else:
+                return JsonResponse({"error": response_data}, status=response.status_code)
+
+        except Client.DoesNotExist:
+            return JsonResponse({"error": "Client not found"}, status=404)
+        
+    except InvalidToken:
+        return Response({"error": "Invalid token"}, status=status.HTTP_401_UNAUTHORIZED)
+
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
 
 
 

@@ -8,6 +8,7 @@ urlpatterns = [
     path('login/', views.login, name='login'),
     path('finalize/', views.finalize, name='finalize'),
     path('logout/', views.logout, name='logout'),
+    path('check-scopes/', views.check_scopes, name='check_scopes'),
 
      # mandatory webhooks
     path('webhooks/customer-data-request/', customer_data_request, name='customer-data-request'),
