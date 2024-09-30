@@ -8,6 +8,7 @@ from django.shortcuts import redirect
 from shopify_app.decorators import shop_login_required
 from django.http import JsonResponse
 from datetime import datetime
+from django.utils import timezone
 import pytz
 from django.views.decorators.http import require_GET
 import shopify
@@ -19,6 +20,7 @@ from shopify_app.models import (
     SortingPlan,
     SortingAlgorithm,
     ClientCollections,
+    ClientProducts
 )
 from shopify_app.api import (
     fetch_collections,
@@ -35,9 +37,10 @@ from .strategies import (
     promote_high_variant_availability,
     clearance_sale,
     promote_high_revenue_new_products,
+    remove_pinned_products,
     push_out_of_stock_down,
-    push_pinned_out_of_stock_down,
-    push_pinned_products_to_top,
+    segregate_pinned_products,
+    push_pinned_products_to_top
 )
 
 from django.shortcuts import get_object_or_404
@@ -259,6 +262,27 @@ def get_products(request):
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+def update_or_create_client_products(products, shop_id, collection_id):
+    for product in products:
+        ClientProducts.objects.update_or_create(
+            product_id=product['id'],
+            defaults={
+                'shop_id': shop_id,
+                'collection_id': collection_id,
+                'product_name': product['title'],
+                'image_link': product['image'],
+                'created_at': product['created_at'],
+                'tags': product['tags'],
+                'updated_at': product['updated_at'],
+                'published_at': product['published_at'],
+                'total_revenue': product['total_revenue'],
+                'variant_count': product['variant_count'],
+                'variant_availability': product['variant_availability'],
+                'total_sold_item': product['total_sold_item'],
+                'sales_velocity': product['sales_velocity'],
+            }
+        )
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def update_product_order(request):
@@ -314,6 +338,37 @@ def update_product_order(request):
                 {"error": "Access token not found for this client"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        
+        try:
+            client_collections = ClientCollections.objects.get(
+                shop_id=shop_id, collectionid=collection_id
+            )
+            latest_updated_at, latest_published_at = collection_date_check(client.shop_url, collection_id)
+            if latest_updated_at > client_collections.updated_at:
+                products = fetch_products_by_collection(client.shop_url, collection_id, days=7)
+                if not products:
+                    return Response(
+                        {"error": "Failed to fetch products for the collection"},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    )
+                update_or_create_client_products(products, shop_id, collection_id)
+            else:
+                return Response({"message": "No updates in collection."}, status=status.HTTP_200_OK)
+            
+        except ClientCollections.DoesNotExist:
+            # Collection does not exist, fetch products
+            products = fetch_products_by_collection(client.shop_url, collection_id, days=7)
+            if not products:
+                return Response(
+                    {"error": "Failed to fetch products for the collection"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+            client_collections = ClientCollections.objects.create(
+                shop_id=shop_id,
+                collectionid=collection_id,
+                updated_at=timezone.now() 
+            )
+            update_or_create_client_products(products, shop_id, collection_id)
 
         sort_function = ALGO_ID_TO_FUNCTION.get(algo_id)
         if not sort_function:
@@ -325,12 +380,12 @@ def update_product_order(request):
         parameters_used = client_collections.parameters_used
         pinned_product_ids = client_collections.pinned_products
 
-        # days = parameters_used.get("days", 7)
-        days = 7    
-        # percentile = parameters_used.get("percentile", 10)
-        percentile = 100
-        # variant_threshold = parameters_used.get("variant_threshold", 5.0)
-        variant_threshold = None
+        days = parameters_used.get("days", 7)
+        # days = 7
+        percentile = parameters_used.get("percentile", 100)
+        # percentile = 100
+        variant_threshold = parameters_used.get("variant_threshold", 5.0)
+        # variant_threshold = None
 
         products = fetch_products_by_collection(client.shop_url, collection_id, days)
 
@@ -341,49 +396,50 @@ def update_product_order(request):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
         else:
-            print("products ah rhe")
+            print("products ah gye upr") 
+        
+        if pinned_product_ids:
+            products, pinned_products = remove_pinned_products(
+                products, pinned_product_ids
+            )
 
-        sorted_product_ids = sort_function(
+        sorted_products = sort_function(
             products,
             days=days,
             percentile=percentile,
             variant_threshold=variant_threshold,
         )
 
-        if sorted_product_ids:
-            print("product hai sorted wale")
+        if sorted_products:
+            print("product hai sorted wale niche")
 
-        print(sorted_product_ids)
-
-        print("0")
-        # print("pinned product array", pinned_product_ids)
-        # print("before pin product at top:",sorted_product_ids)
-        if pinned_product_ids:
-            sorted_product_ids = push_pinned_products_to_top(
-                sorted_product_ids, pinned_product_ids
-            )
-
-        print(sorted_product_ids)
-        # print("after pin product at top:",sorted_product_ids)    
+        print(sorted_products)
+  
         if client_collections.pinned_out_of_stock_down:
-            print("1")
-            sorted_product_ids = push_pinned_out_of_stock_down(
-                sorted_product_ids, pinned_product_ids
-            )
+            pinned_products, ofs_pinned = segregate_pinned_products(pinned_products)
 
-        # print(sorted_product_ids)
         if client_collections.out_of_stock_down:
-            print("2")
-            sorted_product_ids = push_out_of_stock_down(sorted_product_ids, pinned_product_ids)
+            sorted_products, ofs_sorted_products = push_out_of_stock_down(sorted_products)
 
 
-        # print("sorted_products_id:",sorted_product_ids)
-        pid = pid_extractor(sorted_product_ids)
-        print(pid)
-        print("4")
+        if client_collections.pinned_out_of_stock_down:
+            if client_collections.out_of_stock_down:
+                sorted_products = pinned_products + sorted_products + ofs_sorted_products + ofs_pinned
+            else:
+                sorted_products = pinned_products + sorted_products + ofs_pinned
+        else:
+            if client_collections.out_of_stock_down:
+                sorted_products = pinned_products + sorted_products + ofs_sorted_products
+            else:
+                sorted_products = pinned_products + sorted_products
+
+        pid = pid_extractor(sorted_products)
+        print("pid:",pid)
+
         success = update_collection_products_order(
             client.shop_url, access_token, collection_id, pid
         )
+
         if success:
             return Response({"success": True}, status=status.HTTP_200_OK)
         else:
@@ -404,7 +460,7 @@ def pid_extractor(products):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def available_sorts(request):  # working and tested
+def available_sorts(request):  
     auth_header = request.headers.get("Authorization", None)
     if auth_header is None:
         return JsonResponse(

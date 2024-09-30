@@ -90,6 +90,51 @@ class Client(AbstractBaseUser):
 
     def has_module_perms(self, app_label):
         return self.is_superuser
+    
+#done
+class ClientCollections(models.Model):  
+    id = models.BigAutoField(primary_key=True)
+    collectionid = models.BigIntegerField(unique=True)
+    shop_id = models.CharField(max_length=255)
+    collection_name = models.CharField(max_length=255)
+    status = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    products_count = models.IntegerField(default=0)
+    sort_date = models.DateTimeField(null=True, blank=True)
+    pinned_products = models.JSONField(blank=True, null=True)
+    algo = models.ForeignKey('SortingAlgorithm', on_delete=models.CASCADE, null=True, blank=True)
+    parameters_used = models.JSONField(default=dict)
+    updated_at = models.DateTimeField(auto_now=True)
+    out_of_stock_down = models.BooleanField(default=False)
+    pinned_out_of_stock_down = models.BooleanField(default=False)
+    new_out_of_stock_down = models.BooleanField(default=False)
+    lookback_periods = models.CharField(max_length=255, blank=True, null=True)
+
+    class Meta:
+        unique_together = ('shop_id', 'collectionid')  
+
+    def __str__(self):
+        return f"{self.collection_name} (ID: {self.collectionid}) for shop_id {self.shop_id} - Sorted on {self.sort_date}"
+    
+#new
+class ClientProducts(models.Model):
+    product_id = models.CharField(max_length=255, primary_key=True)
+    shop_id = models.ForeignKey(Client, on_delete=models.CASCADE, to_field='shop_id')
+    collection_id = models.ForeignKey(ClientCollections, on_delete=models.CASCADE, to_field='collectionid')
+    product_name = models.CharField(max_length=255)
+    image_link = models.URLField(max_length=500, blank=True, null=True)
+    created_at = models.DateTimeField()
+    tags = models.JSONField(blank=True, null=True)
+    updated_at = models.DateTimeField()
+    published_at = models.DateTimeField()
+    total_revenue = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    variant_count = models.IntegerField(default=0)
+    variant_availability = models.IntegerField(default=0)
+    total_sold_item = models.IntegerField(default=0)
+    sales_velocity = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+
+    def __str__(self):
+        return f"Product {self.product_name} (ID: {self.product_id}) for shop_id {self.shop_id}"
 
 #done
 class SortingPlan(models.Model):
@@ -130,30 +175,6 @@ def default_parameters_used():
         "variant_threshold": None
     }
 
-#done
-class ClientCollections(models.Model):
-    id = models.BigAutoField(primary_key=True)
-    collectionid = models.BigIntegerField(unique=True)
-    shop_id = models.CharField(max_length=255)
-    collection_name = models.CharField(max_length=255)
-    status = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    products_count = models.IntegerField(default=0)
-    sort_date = models.DateTimeField(null=True, blank=True)
-    pinned_products = models.JSONField(blank=True, null=True)
-    algo = models.ForeignKey('SortingAlgorithm', on_delete=models.CASCADE, null=True, blank=True)
-    parameters_used = models.JSONField(default=default_parameters_used)
-    updated_at = models.DateTimeField(auto_now=True)
-    out_of_stock_down = models.BooleanField(default=False)
-    pinned_out_of_stock_down = models.BooleanField(default=False)
-    new_out_of_stock_down = models.BooleanField(default=False)
-    lookback_periods = models.CharField(max_length=255, blank=True, null=True)
-
-    class Meta:
-        unique_together = ('shop_id', 'collectionid')  
-
-    def __str__(self):
-        return f"{self.collection_name} (ID: {self.collectionid}) for shop_id {self.shop_id} - Sorted on {self.sort_date}"
     
 #done
 class Subscription(models.Model):
