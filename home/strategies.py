@@ -24,7 +24,6 @@ def promote_new(products, days: int = None, percentile: int = 100, variant_thres
     
     return sorted_new_products[:top_percent_index]
 
-
 def promote_high_revenue_products(products, days: int = None, percentile: int = 100, variant_threshold: float = 0.0):
     if days is not None:
         time_threshold = datetime.now(pytz.utc) - timedelta(days=days)
@@ -51,7 +50,6 @@ def promote_high_revenue_products(products, days: int = None, percentile: int = 
     reordered_products = top_products + remaining_products
 
     return reordered_products
-
 
 def promote_high_inventory_products(products, days: int = None, percentile: int = 100, variant_threshold: float = 0.0):
     # Filter products by 'listed_date' if days is provided
@@ -112,7 +110,6 @@ def bestsellers_high_variant_availability(products, days: int = None, percentile
     reordered_products = top_products + remaining_products
 
     return reordered_products
-
 
 def promote_high_variant_availability(products, days: int = None, percentile: int = 100, variant_threshold: float = 0.0):
     # Filter products with high variant availability
@@ -189,6 +186,8 @@ def promote_high_revenue_new_products(products, days: int = None, percentile: in
     return reordered_products
 
 
+
+
 def remove_pinned_products(products, pinned_product_ids):
     pinned_product_ids_str = list(map(str, pinned_product_ids))
     
@@ -202,7 +201,6 @@ def remove_pinned_products(products, pinned_product_ids):
             non_pinned_products.append(product)
             
     return non_pinned_products, pinned_products
-
 
 def push_pinned_products_to_top(products, pinned_products):
     sorted_products = pinned_products + products
@@ -235,30 +233,4 @@ def segregate_pinned_products(pinned_products):
 
 
 
-############################################################################################
-# sorting rules 
-############################################################################################
-#new_products   
-def new_products(products, days: int = None, date_type: int = 0):
-    date_field_mapping = {
-        0: 'created_at',
-        1: 'published_at',
-        2: 'updated_at'
-    }
-    
-    date_field = date_field_mapping.get(date_type, 'created_at')
 
-    lookback_date = datetime.now() - timedelta(days=days) if days else None
-
-    filtered_products = [
-        p for p in products
-        if isinstance(p, dict) and date_field in p and isinstance(p[date_field], str) and 'id' in p
-        and (lookback_date is None or parser.isoparse(p[date_field]) >= lookback_date)
-    ]
-
-    
-    sorted_products = sorted(filtered_products, key=lambda p: parser.isoparse(p[date_field]), reverse=True)
-
-    return sorted_products
-
-#Revenue Generated

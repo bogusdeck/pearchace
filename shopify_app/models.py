@@ -94,7 +94,7 @@ class Client(AbstractBaseUser):
 #done
 class ClientCollections(models.Model):  
     id = models.BigAutoField(primary_key=True)
-    collectionid = models.BigIntegerField(unique=True)
+    collection_id = models.BigIntegerField(unique=True)
     shop_id = models.CharField(max_length=255)
     collection_name = models.CharField(max_length=255)
     status = models.BooleanField(default=True)
@@ -109,18 +109,20 @@ class ClientCollections(models.Model):
     pinned_out_of_stock_down = models.BooleanField(default=False)
     new_out_of_stock_down = models.BooleanField(default=False)
     lookback_periods = models.CharField(max_length=255, blank=True, null=True)
+    published_at = models.DateTimeField(null=True, blank=True)
+    refetch = models.BooleanField(default=True)
 
     class Meta:
-        unique_together = ('shop_id', 'collectionid')  
+        unique_together = ('shop_id', 'collection_id')  
 
     def __str__(self):
-        return f"{self.collection_name} (ID: {self.collectionid}) for shop_id {self.shop_id} - Sorted on {self.sort_date}"
+        return f"{self.collection_name} (ID: {self.collection_id}) for shop_id {self.shop_id} - Sorted on {self.sort_date}"
     
 #new
 class ClientProducts(models.Model):
     product_id = models.CharField(max_length=255, primary_key=True)
     shop_id = models.ForeignKey(Client, on_delete=models.CASCADE, to_field='shop_id')
-    collection_id = models.ForeignKey(ClientCollections, on_delete=models.CASCADE, to_field='collectionid')
+    collection_id = models.ForeignKey(ClientCollections, on_delete=models.CASCADE, to_field='collection_id')
     product_name = models.CharField(max_length=255)
     image_link = models.URLField(max_length=500, blank=True, null=True)
     created_at = models.DateTimeField()
@@ -130,8 +132,9 @@ class ClientProducts(models.Model):
     total_revenue = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     variant_count = models.IntegerField(default=0)
     variant_availability = models.IntegerField(default=0)
-    total_sold_item = models.IntegerField(default=0)
+    total_inventory = models.IntegerField(default=0)
     sales_velocity = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    total_sold_units = models.IntegerField(default=0)
 
     def __str__(self):
         return f"Product {self.product_name} (ID: {self.product_id}) for shop_id {self.shop_id}"

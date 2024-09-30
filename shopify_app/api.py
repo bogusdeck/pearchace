@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 def _get_shopify_headers(access_token):
     return {"Content-Type": "application/json", "X-Shopify-Access-Token": access_token}
 
-def fetch_collections(shop_url):
+def old_fetch_collections(shop_url): # will remove later here for refrence
     client = _get_client(shop_url)
     if not client:
         return []
@@ -66,6 +66,69 @@ def fetch_collections(shop_url):
             "id": collection["node"]["id"],
             "title": collection["node"]["title"],
             "products_count": collection["node"]["productsCount"]["count"],
+        }
+        for collection in collections
+    ]
+
+def fetch_collections(shop_url):
+    client = _get_client(shop_url)
+    if not client:
+        return []
+    
+    access_token = client.access_token
+    api_version = apps.get_app_config("shopify_app").SHOPIFY_API_VERSION
+    headers = _get_shopify_headers(access_token)
+
+    url = f"https://{shop_url}/admin/api/{api_version}/graphql.json"
+    collections = []
+    has_next_page = True
+    cursor = None
+
+    while has_next_page:
+        query = """
+        query($after: String) {
+            collections(first: 250, after: $after) {
+                edges {
+                    cursor
+                    node {
+                        id
+                        title
+                        updatedAt
+                        publishedAt
+                        productsCount {
+                            count
+                        }
+                    }
+                }
+                pageInfo {
+                    hasNextPage
+                }
+            }
+        }
+        """
+
+        variables = {"after": cursor} if cursor else {}
+        response = requests.post(url, json={"query": query, "variables": variables}, headers=headers)
+
+        if response.status_code == 200:
+            data = response.json()
+            new_collections = data.get("data", {}).get("collections", {}).get("edges", [])
+            collections.extend(new_collections)
+            page_info = data.get("data", {}).get("collections", {}).get("pageInfo", {})
+            has_next_page = page_info.get("hasNextPage", False)
+            if has_next_page:
+                cursor = new_collections[-1]["cursor"] if new_collections else None
+        else:
+            print(f"Error fetching collections: {response.status_code} - {response.text}")
+            break
+        
+    return [
+        {
+            "id": collection["node"]["id"],
+            "title": collection["node"]["title"],
+            "products_count": collection["node"]["productsCount"]["count"],
+            "updated_at": collection["node"]["updatedAt"],
+            "published_at": collection["node"]["publishedAt"]
         }
         for collection in collections
     ]
@@ -141,6 +204,8 @@ def fetch_products_by_collection_with_img(shop_url, collection_id):
         print(f"Error fetching products: {response.status_code} - {response.text}")
         return []
 
+
+##########################
 def fetch_products_by_collection(shop_url, collection_id, days):
     client = _get_client(shop_url)
     if not client:
@@ -172,6 +237,15 @@ def fetch_products_by_collection(shop_url, collection_id, days):
                             publishedAt
                             updatedAt
                             tags
+                            images(first: 5) {{
+                                edges {{
+                                    node {{
+                                        id
+                                        src
+                                        altText
+                                    }}
+                                }}
+                            }}
                             variantsCount {{  
                                 count
                             }}
@@ -223,6 +297,10 @@ def fetch_products_by_collection(shop_url, collection_id, days):
         {
             "id": product["node"]["id"].split("/")[-1],
             "title": product["node"]["title"],
+            "images": [
+                    image["node"]
+                    for image in product["node"].get("images", {}).get("edges", [])
+                ],
             "totalInventory": product["node"]["totalInventory"],
             "listed_date": product["node"]["createdAt"],
             "published_at": product["node"]["publishedAt"],
@@ -322,154 +400,41 @@ def calculate_sales_velocity_from_orders(orders, product_id, days, return_units=
     sales_velocity = total_sold_units / days if days > 0 else 0
     return total_sold_units if return_units else sales_velocity
 
+def collection_date_check(shop_url, access_token,collection_id):
+    client = _get_client(shop_url)
+    if not client:
+        return []
+    
+    api_version = apps.get_app_config("shopify_app").SHOPIFY_API_VERSION
+    headers = _get_shopify_headers(access_token)
+    url = f"https://{shop_url}/admin/api/{api_version}/graphql.json"
+
+    query = """
+    {
+      collection(id: "gid://shopify/Collection/%s") {
+        updatedAt
+        publishedAt
+      }
+    }
+    """ % collection_id
+
+    response = requests.post(url, json={"query": query}, headers=headers)
+    if response.status_code == 200:
+        data = response.json()
+        collection = data.get("data", {}).get("collection", {})
+        updated_at = collection.get("updatedAt")
+        published_at = collection.get("publishedAt")
+
+        return updated_at, published_at
+    else:
+        print(f"Error fetching data: {response.text}")
+        return None, None
+
+#########################
+
 def get_past_date(days):
     date = datetime.utcnow() - timedelta(days=days)
     return date.strftime('%Y-%m-%dT%H:%M:%SZ')  
-
-def calculate_revenue(shop_url, product_id, days, headers):
-    """
-    Fetches the total revenue generated by sales of the product (based on order data)
-    over the specified number of days, with pagination.
-    """
-    api_version = apps.get_app_config("shopify_app").SHOPIFY_API_VERSION
-    has_next_page = True
-    after_cursor = None
-    total_revenue = 0
-    past_date = get_past_date(days)
-
-    while has_next_page:
-        pagination_query = f', after: "{after_cursor}"' if after_cursor else ""
-        query = f"""
-        {{
-          orders(first: 250, query: "created_at:>={past_date}") {{
-            edges {{
-              cursor
-              node {{
-                lineItems(first: 100) {{
-                  edges {{
-                    node {{
-                      variant {{
-                        id
-                        product {{
-                          id
-                        }}
-                      }}
-                      quantity
-                      originalUnitPriceSet {{
-                        shopMoney {{
-                          amount
-                        }}
-                      }}
-                    }}
-                  }}
-                }}
-              }}
-            }}
-            pageInfo {{
-              hasNextPage
-            }}
-          }}
-        }}
-        """
-
-
-        url = f"https://{shop_url}/admin/api/{api_version}/graphql.json"
-        response = requests.post(url, json={"query": query}, headers=headers)
-
-        # print("response", response.json())
-        if response.status_code != 200:
-            print(f"Error fetching orders: {response.status_code} - {response.text}")
-            return 0
-
-        orders_data = response.json().get("data", {}).get("orders", {})
-        has_next_page = orders_data.get("pageInfo", {}).get("hasNextPage", False)
-
-        for order in orders_data.get("edges", []):
-            line_items = order["node"]["lineItems"]["edges"]
-            after_cursor = order["cursor"]
-            # print("hoi ho",line_items)
-            for item in line_items:
-                # Check if the product ID matches
-                # print ("id :", item["node"]["variant"]["product"]["id"], product_id)
-                if item["node"]["variant"]["product"]["id"] == product_id:
-                    price = float(item["node"]["originalUnitPriceSet"]["shopMoney"]["amount"])
-                    quantity = int(item["node"]["quantity"])
-                    print("\ntotal_revenue =", total_revenue)
-                    total_revenue += price * quantity
-
-    return total_revenue
- 
-def calculate_sales_velocity(shop_url, product_id, days):
-    """
-    Calculate the product's sales velocity based on total sold units over a specified number of days using Shopify's GraphQL API with pagination.
-    """
-    if days <= 0:
-        return 0
-
-    end_date = timezone.now()
-    start_date = end_date - timedelta(days=days)
-    client = _get_client(shop_url)
-    if not client:
-        return 0
-
-    access_token = client.access_token
-    api_version = apps.get_app_config("shopify_app").SHOPIFY_API_VERSION
-    headers = _get_shopify_headers(access_token)
-
-    url = f"https://{shop_url}/admin/api/{api_version}/graphql.json"
-
-    start_date_iso = start_date.isoformat()
-    end_date_iso = end_date.isoformat()
-
-    total_sold_units = 0
-    has_next_page = True
-    after_cursor = None
-
-    while has_next_page:
-        pagination_query = f', after: "{after_cursor}"' if after_cursor else ""
-        query = f"""
-        {{
-          orders(first: 250, query: "created_at:>{start_date_iso} AND created_at:<{end_date_iso}"{pagination_query}) {{
-            edges {{
-              cursor
-              node {{
-                lineItems(first: 250) {{
-                  edges {{
-                    node {{
-                      product {{
-                        id  
-                      }}
-                      quantity
-                    }}
-                  }}
-                }}
-              }}
-            }}
-            pageInfo {{
-              hasNextPage
-            }}
-          }}
-        }}
-        """
-
-        response = requests.post(url, json={"query": query}, headers=headers)
-
-        if response.status_code != 200:
-            print(f"Error fetching orders: {response.status_code} - {response.text}")
-            return 0
-
-        data = response.json().get("data", {}).get("orders", {})
-        has_next_page = data.get("pageInfo", {}).get("hasNextPage", False)
-
-        for order in data.get("edges", []):
-            after_cursor = order["cursor"]
-
-            for line_item in order["node"]["lineItems"]["edges"]:
-                if line_item["node"]["product"]["id"] == f"gid://shopify/Product/{product_id}":
-                    total_sold_units += int(line_item["node"]["quantity"])
-
-    sales_velocity = total_sold_units / days if days > 0 else 0
-    return sales_velocity, total_sold_units
 
 def _get_client(shop_url):
     """
