@@ -7,19 +7,17 @@ import pytz
 ############################################################################################
 
 #done
-def new_products(products, days: int = None, date_type: int = 0):
+def new_products(products, days: int = None, date_type: int = 0, capping: int = None):
     date_field_mapping = {
         0: 'created_at',
         1: 'published_at',
         2: 'updated_at'
     }
 
-    # Ensure the provided date_type is valid, default to 'created_at' if not
     date_field = date_field_mapping.get(date_type, 'created_at')
 
     lookback_date = datetime.now() - timedelta(days=days) if days else None
 
-    # Filter products based on the selected date field and the lookback period
     filtered_products = [
         p for p in products
         if isinstance(p, dict) and date_field in p and isinstance(p[date_field], str) and 'id' in p
@@ -28,13 +26,12 @@ def new_products(products, days: int = None, date_type: int = 0):
     
     sorted_products = sorted(filtered_products, key=lambda p: parser.isoparse(p[date_field]), reverse=True)
 
-    return sorted_products
+    return sorted_products[:capping] if capping else sorted_products
 
 #done
-def revenue_generated(products, days: int = None, high_to_low: bool = True):
+def revenue_generated(products, days: int = None, high_to_low: bool = True, capping: int = None):
     lookback_date = datetime.now() - timedelta(days=days) if days else None
 
-    # Filter products based on the lookback period and check for 'revenue' and 'id' fields
     filtered_products = [
         p for p in products
         if isinstance(p, dict) and 'revenue' in p and 'listed_date' in p and 'id' in p
@@ -42,20 +39,14 @@ def revenue_generated(products, days: int = None, high_to_low: bool = True):
         and (lookback_date is None or parser.isoparse(p['listed_date']) >= lookback_date)
     ]
 
-    # Sort products by revenue (high to low if True, low to high if False)
-    sorted_products = sorted(
-        filtered_products,
-        key=lambda p: p['revenue'],
-        reverse=high_to_low
-    )
+    sorted_products = sorted(filtered_products, key=lambda p: p['revenue'], reverse=high_to_low)
 
-    return sorted_products
+    return sorted_products[:capping] if capping else sorted_products
 
-
-def Number_of_sales(products, days: int = None, high_to_low: bool = True):
+#not done
+def Number_of_sales(products, days: int = None, high_to_low: bool = True, capping: int = None):
     lookback_date = datetime.now() - timedelta(days=days) if days else None
 
-    # Filter products based on the lookback period and check for 'number_of_sales' and 'id' fields
     filtered_products = [
         p for p in products
         if isinstance(p, dict) and 'number_of_sales' in p and 'listed_date' in p and 'id' in p
@@ -63,11 +54,106 @@ def Number_of_sales(products, days: int = None, high_to_low: bool = True):
         and (lookback_date is None or parser.isoparse(p['listed_date']) >= lookback_date)
     ]
 
-    # Sort products by number_of_sales (high to low if True, low to high if False)
+    sorted_products = sorted(filtered_products, key=lambda p: p['number_of_sales'], reverse=high_to_low)
+
+    return sorted_products[:capping] if capping else sorted_products
+
+#not done
+def inventory_quantity(products, days: int = None, high_to_low: bool = True, capping: int = None):
+    lookback_date = datetime.now() - timedelta(days=days) if days else None
+
+    filtered_products = [
+        p for p in products
+        if isinstance(p, dict) and 'inventory_quantity' in p and 'listed_date' in p and 'id' in p
+        and isinstance(p['listed_date'], str)
+        and (lookback_date is None or parser.isoparse(p['listed_date']) >= lookback_date)
+    ]
+
     sorted_products = sorted(
         filtered_products,
-        key=lambda p: p['number_of_sales'],
+        key=lambda p: p['inventory_quantity'],
         reverse=high_to_low
     )
+
+    return sorted_products[:capping] if capping else sorted_products
+
+#not done 
+def variant_availability_ratio(products, days: int = None, high_to_low: bool = True, capping: int = None):
+    lookback_date = datetime.now() - timedelta(days=days) if days else None
+
+    filtered_products = [
+        p for p in products
+        if isinstance(p, dict) and 'variant_availability' in p and 'listed_date' in p and 'id' in p
+        and isinstance(p['listed_date'], str)
+        and (lookback_date is None or parser.isoparse(p['listed_date']) >= lookback_date)
+    ]
+
+    sorted_products = sorted(
+        filtered_products,
+        key=lambda p: p['variant_availability'],
+        reverse=high_to_low
+    )
+
+    return sorted_products[:capping] if capping else sorted_products
+
+#not done
+def product_tags(products, days: int = None, is_equal_to: bool = True, tags: list = []):
+    lookback_date = datetime.now() - timedelta(days=days) if days else None
+
+    # Filter products based on lookback period and check for 'tags' and 'listed_date' fields
+    filtered_products = [
+        p for p in products
+        if isinstance(p, dict) and 'tags' in p and 'listed_date' in p and 'id' in p
+        and isinstance(p['listed_date'], str)
+        and isinstance(p['tags'], list)
+        and (lookback_date is None or parser.isoparse(p['listed_date']) >= lookback_date)
+    ]
+
+    # Filter by tags: is_equal_to=True means products should match the tags; False means they should NOT match the tags
+    if is_equal_to:
+        # Include products that have any of the specified tags
+        filtered_by_tags = [
+            p for p in filtered_products 
+            if any(tag in p['tags'] for tag in tags)
+        ]
+    else:
+        # Exclude products that have any of the specified tags
+        filtered_by_tags = [
+            p for p in filtered_products 
+            if not any(tag in p['tags'] for tag in tags)
+        ]
+
+    return filtered_by_tags
+
+
+#not done
+def product_inventory(products, days: int = None, comparison_type: int = 0, inventory_threshold: int = 0, capping: int = None):
+    # Ensure the comparison_type is valid; default to 'greater than' if invalid
+    comparison_mapping = {
+        0: lambda p: p['inventory'] > inventory_threshold,   # Greater than
+        1: lambda p: p['inventory'] < inventory_threshold,   # Less than
+        2: lambda p: p['inventory'] == inventory_threshold,  # Equal to
+        3: lambda p: p['inventory'] != inventory_threshold   # Not equal to
+    }
+    
+    comparison_function = comparison_mapping.get(comparison_type, comparison_mapping[0])
+
+    lookback_date = datetime.now() - timedelta(days=days) if days else None
+
+    # Filter products based on the lookback period and inventory
+    filtered_products = [
+        p for p in products
+        if isinstance(p, dict) and 'inventory' in p and 'listed_date' in p and 'id' in p
+        and isinstance(p['listed_date'], str) and isinstance(p['inventory'], int)
+        and (lookback_date is None or parser.isoparse(p['listed_date']) >= lookback_date)
+        and comparison_function(p)
+    ]
+
+    # Sort products based on inventory (high to low)
+    sorted_products = sorted(filtered_products, key=lambda p: p['inventory'], reverse=True)
+
+    # Apply capping if provided
+    if capping is not None:
+        sorted_products = sorted_products[:capping]
 
     return sorted_products

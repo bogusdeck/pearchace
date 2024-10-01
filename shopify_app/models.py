@@ -39,6 +39,7 @@ class Client(AbstractBaseUser):
     updated_at = models.DateTimeField(auto_now=True)
     default_algo = models.ForeignKey('SortingAlgorithm', on_delete=models.SET_NULL, null=True, blank=True)
     member = models.BooleanField(default=False)
+    lookback_period = models.IntegerField(default=7, blank=True, null=True)
     timezone = models.CharField(default='UTC', max_length=3)
     createdateshopify = models.DateTimeField(blank=True, null=True)
     billingAddress = models.JSONField(default=dict)
@@ -108,7 +109,6 @@ class ClientCollections(models.Model):
     out_of_stock_down = models.BooleanField(default=False)
     pinned_out_of_stock_down = models.BooleanField(default=False)
     new_out_of_stock_down = models.BooleanField(default=False)
-    lookback_periods = models.CharField(max_length=255, blank=True, null=True)
     published_at = models.DateTimeField(null=True, blank=True)
     refetch = models.BooleanField(default=True)
 
@@ -121,8 +121,8 @@ class ClientCollections(models.Model):
 #new
 class ClientProducts(models.Model):
     product_id = models.CharField(max_length=255, primary_key=True)
-    shop_id = models.ForeignKey(Client, on_delete=models.CASCADE, to_field='shop_id')
-    collection_id = models.ForeignKey(ClientCollections, on_delete=models.CASCADE, to_field='collection_id')
+    shop = models.ForeignKey(Client, on_delete=models.CASCADE, to_field='shop_id')
+    collection = models.ForeignKey(ClientCollections, on_delete=models.CASCADE, to_field='collection_id')
     product_name = models.CharField(max_length=255)
     image_link = models.URLField(max_length=500, blank=True, null=True)
     created_at = models.DateTimeField()
@@ -235,23 +235,7 @@ class PlanHistory(models.Model):
         return f"Plan History {self.id} for {self.client.shop_name}"
     
 
-class ClientProducts(models.Model):
-    product_id = models.BigIntegerField(primary_key=True)  
-    shop_id = models.ForeignKey('Client', on_delete=models.CASCADE)
-    collection_id = models.ForeignKey('ClientCollections', on_delete=models.CASCADE)
-    title = models.CharField(max_length=255)  
-    published_at = models.DateTimeField(null=True, blank=True)  
-    variant_count = models.IntegerField(default=0)  
-    revenue_generation = models.DecimalField(max_digits=15, decimal_places=2, default=0)  
-    total_inventory = models.IntegerField(default=0)  
-    sales_velocity = models.DecimalField(max_digits=10, decimal_places=2, default=0)  
 
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        unique_together = ('shop_id', 'collection_id', 'product_id')  
-
-    def __str__(self):
-        return f"Product {self.title} (ID: {self.product_id}) in Collection {self.collection_id} for shop {self.shop_id}"
+#clientstrategies
+#clientgraphs
 
