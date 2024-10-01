@@ -785,7 +785,7 @@ def update_collection(request, collection_id):  # working not tested
 
         if status_value is not None:
             collection.status = status_value
-            updated = True
+            updated = True  
 
         if algo_id is not None:
             try:

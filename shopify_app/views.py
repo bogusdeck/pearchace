@@ -112,7 +112,7 @@ from .models import Client
 from rest_framework.permissions import IsAuthenticated
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def check_scopes(request):
     try:
         auth_header = request.headers.get("Authorization", None)
