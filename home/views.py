@@ -1505,18 +1505,18 @@ def update_default_algo(request):  # working and tested
 
 #################################################################################################################################################################
 
-from .graph import calculate_total_revenue
+# from .graph import calculate_total_revenue
 
-@api_view(['GET'])
-def get_graph(request):
-    date = request.GET.get('date')
+# @api_view(['GET'])
+# def get_graph(request):
+#     date = request.GET.get('date')
     
-    revenue_data, top_products_by_revenue, top_products_by_sold_units = calculate_total_revenue(date)
+#     revenue_data, top_products_by_revenue, top_products_by_sold_units = calculate_total_revenue(date)
 
-    response_data = {
-        'date': date,
-        'total_revenue': revenue_data['total_revenue'],
-        'top_products_by_revenue': top_products_by_revenue,
-        'top_products_by_sold_units': top_products_by_sold_units,
-    }
-    return Response(response_data)
+#     response_data = {
+#         'date': date,
+#         'total_revenue': revenue_data['total_revenue'],
+#         'top_products_by_revenue': top_products_by_revenue,
+#         'top_products_by_sold_units': top_products_by_sold_units,
+#     }
+#     return Response(response_data)
