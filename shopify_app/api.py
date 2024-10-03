@@ -94,7 +94,6 @@ def fetch_collections(shop_url):
                         id
                         title
                         updatedAt
-                        publishedAt
                         productsCount {
                             count
                         }
@@ -110,6 +109,8 @@ def fetch_collections(shop_url):
         variables = {"after": cursor} if cursor else {}
         response = requests.post(url, json={"query": query, "variables": variables}, headers=headers)
 
+        print(response.json())
+        
         if response.status_code == 200:
             data = response.json()
             new_collections = data.get("data", {}).get("collections", {}).get("edges", [])
@@ -128,12 +129,11 @@ def fetch_collections(shop_url):
             "title": collection["node"]["title"],
             "products_count": collection["node"]["productsCount"]["count"],
             "updated_at": collection["node"]["updatedAt"],
-            "published_at": collection["node"]["publishedAt"]
         }
         for collection in collections
     ]
 
-def fetch_products_by_collection_with_img(shop_url, collection_id):
+def fetch_products_by_collection_with_img(shop_url, collection_id): #will remove later
     """
     Fetches all products from a specific collection in a Shopify store using the GraphQL API.
 
@@ -192,7 +192,6 @@ def fetch_products_by_collection_with_img(shop_url, collection_id):
             {
                 "id": product["node"]["id"],
                 "title": product["node"]["title"],
-                "handle": product["node"]["handle"],
                 "images": [
                     image["node"]
                     for image in product["node"].get("images", {}).get("edges", [])
@@ -207,6 +206,7 @@ def fetch_products_by_collection_with_img(shop_url, collection_id):
 
 ##########################
 def fetch_products_by_collection(shop_url, collection_id, days):
+    print("api running start")
     client = _get_client(shop_url)
     if not client:
         return []
@@ -216,6 +216,7 @@ def fetch_products_by_collection(shop_url, collection_id, days):
     headers = _get_shopify_headers(access_token)
 
     orders = fetch_orders(shop_url, days, headers)
+    print("orders fetching done")
 
     url = f"https://{shop_url}/admin/api/{api_version}/graphql.json"
     products = []
@@ -237,10 +238,9 @@ def fetch_products_by_collection(shop_url, collection_id, days):
                             publishedAt
                             updatedAt
                             tags
-                            images(first: 5) {{
+                            images(first: 1) {{
                                 edges {{
                                     node {{
-                                        id
                                         src
                                         altText
                                     }}
@@ -270,6 +270,8 @@ def fetch_products_by_collection(shop_url, collection_id, days):
 
         variables = {"after": cursor} if cursor else {}
         response = requests.post(url, json={"query": query, "variables": variables}, headers=headers)
+        print("response done")
+
 
         if response.status_code == 200:
             data = response.json()
@@ -297,10 +299,7 @@ def fetch_products_by_collection(shop_url, collection_id, days):
         {
             "id": product["node"]["id"].split("/")[-1],
             "title": product["node"]["title"],
-            "images": [
-                    image["node"]
-                    for image in product["node"].get("images", {}).get("edges", [])
-                ],
+            "image": product["node"]["images"]["edges"][0]["node"]["src"] if product["node"]["images"]["edges"] else None,
             "totalInventory": product["node"]["totalInventory"],
             "listed_date": product["node"]["createdAt"],
             "published_at": product["node"]["publishedAt"],
@@ -322,6 +321,8 @@ def fetch_orders(shop_url, days, headers):
     """
     Fetches orders within a specified date range using Shopify's GraphQL API.
     """
+
+    print("orders fetching start")
     api_version = apps.get_app_config("shopify_app").SHOPIFY_API_VERSION
     url = f"https://{shop_url}/admin/api/{api_version}/graphql.json"
     end_date = timezone.now()
@@ -368,6 +369,7 @@ def fetch_orders(shop_url, days, headers):
         """
 
         response = requests.post(url, json={"query": query}, headers=headers)
+        
         if response.status_code != 200:
             print(f"Error fetching orders: {response.status_code} - {response.text}")
             return []
@@ -381,21 +383,38 @@ def fetch_orders(shop_url, days, headers):
 
 def calculate_revenue_from_orders(orders, product_id):
     total_revenue = 0
+    print("order revenue calculating.....")
     for order in orders:
         for line_item in order["node"]["lineItems"]["edges"]:
-            if line_item["node"]["product"]["id"] == f"gid://shopify/Product/{product_id}":
+            if line_item["node"]["product"]["id"] == product_id :
                 price = float(line_item["node"]["originalUnitPriceSet"]["shopMoney"]["amount"])
                 quantity = int(line_item["node"]["quantity"])
                 total_revenue += price * quantity
+                print("total revuenue" ,total_revenue)
+
+    # with open("product_ids.txt", "a") as file:
+    #     for order in orders:
+    #         for line_item in order["node"]["lineItems"]["edges"]:
+    #             product_id_in_order = line_item["node"]["product"]["id"]
+    #             # Write to the file instead of printing
+    #             file.write(f"{product_id_in_order}, {product_id}\n")
+                
+    #             if product_id_in_order == f"gid://shopify/Product/{product_id}":
+    #                 price = float(line_item["node"]["originalUnitPriceSet"]["shopMoney"]["amount"])
+    #                 quantity = int(line_item["node"]["quantity"])
+    #                 total_revenue += price * quantity
+    #                 file.write(f"Total revenue so far: {total_revenue}\n")
     return total_revenue
 
 def calculate_sales_velocity_from_orders(orders, product_id, days, return_units=False):
     total_sold_units = 0
+    print("total sold unit calculation done!")
     for order in orders:
         for line_item in order["node"]["lineItems"]["edges"]:
-            if line_item["node"]["product"]["id"] == f"gid://shopify/Product/{product_id}":
+            if line_item["node"]["product"]["id"] == product_id :
                 quantity = int(line_item["node"]["quantity"])
                 total_sold_units += quantity
+                print("total_sold_units", total_sold_units)
 
     sales_velocity = total_sold_units / days if days > 0 else 0
     return total_sold_units if return_units else sales_velocity

@@ -105,11 +105,10 @@ class ClientCollections(models.Model):
     pinned_products = models.JSONField(blank=True, null=True)
     algo = models.ForeignKey('SortingAlgorithm', on_delete=models.CASCADE, null=True, blank=True)
     parameters_used = models.JSONField(default=dict)
-    updated_at = models.DateTimeField(auto_now=True)
+    updated_at = models.DateTimeField(null=True, blank=True)
     out_of_stock_down = models.BooleanField(default=False)
     pinned_out_of_stock_down = models.BooleanField(default=False)
     new_out_of_stock_down = models.BooleanField(default=False)
-    published_at = models.DateTimeField(null=True, blank=True)
     refetch = models.BooleanField(default=True)
 
     class Meta:

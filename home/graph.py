@@ -27,3 +27,7 @@
     # top 5 selling products of that collection based on revenue in that collection 
 # top selling products by count of sales
     # top 5 selling products of that collection with number of sales(orders) with total number of sales
+
+
+def total_revenue_generate():
+    pass

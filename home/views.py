@@ -178,7 +178,6 @@ def get_client_info(request):  # working and tested
                 collection_name = collection["title"]
                 products_count = collection["products_count"]
                 updated_at = collection["updated_at"]
-                published_at = collection["published_at"]
                 
                 default_algo = SortingAlgorithm.objects.get(algo_id=1)
 
@@ -191,9 +190,7 @@ def get_client_info(request):  # working and tested
                         "status": False,
                         "algo": default_algo,
                         "parameters_used": {},
-                        "lookback_periods": 7,
                         "updated_at": updated_at,  
-                        "published_at": published_at,
                         "refetch": True,  
                     },
                 )
@@ -202,7 +199,6 @@ def get_client_info(request):  # working and tested
                     client_collection.collection_name = collection_name
                     client_collection.products_count = products_count
                     client_collection.updated_at = updated_at  
-                    client_collection.published_at = published_at  
                     client_collection.refetch = True  
                     client_collection.save()
 
@@ -230,8 +226,9 @@ def get_client_info(request):  # working and tested
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-@shop_login_required
+
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 @csrf_protect
 def get_products(request):
     auth_header = request.headers.get("Authorization", None)
@@ -248,6 +245,7 @@ def get_products(request):
         user = jwt_auth.get_user(validated_token)
 
         shop_id = user.shop_id
+        print(shop_id)
 
         if not shop_id:
             return Response(
@@ -377,17 +375,24 @@ def update_product_order(request):
             client_collections = ClientCollections.objects.get(
                 shop_id=shop_id, collection_id=collection_id
             )
-            latest_updated_at, latest_published_at = collection_date_check(client.shop_url, collection_id)
-            if latest_updated_at > client_collections.updated_at:
-                products = fetch_products_by_collection(client.shop_url, collection_id, days)
-                if not products:
-                    return Response(
-                        {"error": "Failed to fetch products for the collection"},
-                        status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    )
-                update_or_create_client_products(products, shop_id, collection_id)
-            else:
-                return Response({"message": "No updates in collection."}, status=status.HTTP_200_OK)
+            products = fetch_products_by_collection(client.shop_url, collection_id, days)
+            if not products:
+                return Response(
+                    {"error": "Failed to fetch products for the collection"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+            update_or_create_client_products(products, shop_id, collection_id)
+            # # latest_updated_at, latest_published_at = collection_date_check(client.shop_url, collection_id)
+            # # if latest_updated_at > client_collections.updated_at:
+            #     products = fetch_products_by_collection(client.shop_url, collection_id, days)
+            #     if not products:
+            #         return Response(
+            #             {"error": "Failed to fetch products for the collection"},
+            #             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            #         )
+            #     update_or_create_client_products(products, shop_id, collection_id)
+            # else:
+            #     return Response({"message": "No updates in collection."}, status=status.HTTP_200_OK)
             
         except ClientCollections.DoesNotExist:
             products = fetch_products_by_collection(client.shop_url, collection_id, days)
@@ -662,6 +667,7 @@ def get_client_collections(request, client_id):  # working and tested
         shop_url = user.shop_url
         shop_id = user.shop_id
 
+
         if not shop_url:
             return Response(
                 {"error": "Shop URL not found in session"},
@@ -872,7 +878,7 @@ def update_collection(request, collection_id):  # working not tested
 
         if status_value is not None:
             collection.status = status_value
-
+            print("status", status_value)
             updated = True
 
         if algo_id is not None:
@@ -889,7 +895,7 @@ def update_collection(request, collection_id):  # working not tested
             collection.save()
             if collection.status:
                 shop_url = user.shop_url
-                product_fetch_result = fetch_and_store_products(shop_url, collection_id)
+                product_fetch_result = fetch_and_store_products(shop_url, shop_id,collection_id)
 
                 if "error" in product_fetch_result:
                     return Response(
@@ -922,14 +928,18 @@ def update_collection(request, collection_id):  # working not tested
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-def fetch_and_store_products(shop_url, collection_id):
+def fetch_and_store_products(shop_url, shop_id, collection_id, days):
     try:
-        products = fetch_products_by_collection(shop_url, collection_id)
+        products = fetch_products_by_collection(shop_url, collection_id, days)
+        # print("products",products)
+
+        if products: 
+            print("products ah gye")
 
         for product in products:
             product_id = product["id"]
             product_name = product.get("title", "")
-            image_link = product.get("images", [{}])[0].get("src", "") if product.get("images") else ""
+            image_link = product.get("image", [{}])[0].get("src", "") if product.get("images") else ""
             created_at = product.get("listed_date", "")
             updated_at = product.get("updated_at", "")
             published_at = product.get("published_at", "")
@@ -944,8 +954,8 @@ def fetch_and_store_products(shop_url, collection_id):
             if not ClientProducts.objects.filter(product_id=product_id).exists():
                 ClientProducts.objects.create(
                     product_id=product_id,
-                    shop_id=Client.objects.get(shop_id=shop_url),
-                    collection_id=ClientCollections.objects.get(collection_id=collection_id),
+                    shop_id=shop_id,
+                    collection_id=collection_id,
                     product_name=product_name,
                     image_link=image_link,
                     created_at=created_at,
@@ -1221,75 +1231,75 @@ def get_and_update_collections(request):  # working and tested
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-@api_view(["POST"])
-@permission_classes([IsAuthenticated])
-def get_products(request):
-    auth_header = request.headers.get("Authorization", None)
-    if auth_header is None:
-        return Response(
-            {"error": "Authorization header missing"},
-            status=status.HTTP_401_UNAUTHORIZED,
-        )
+# @api_view(["POST"])
+# @permission_classes([IsAuthenticated])
+# def get_products(request):
+#     auth_header = request.headers.get("Authorization", None)
+#     if auth_header is None:
+#         return Response(
+#             {"error": "Authorization header missing"},
+#             status=status.HTTP_401_UNAUTHORIZED,
+#         )
 
-    try:
-        token = auth_header.split(" ")[1]
-        jwt_auth = JWTAuthentication()
-        validated_token = jwt_auth.get_validated_token(token)
-        user = jwt_auth.get_user(validated_token)
+#     try:
+#         token = auth_header.split(" ")[1]
+#         jwt_auth = JWTAuthentication()
+#         validated_token = jwt_auth.get_validated_token(token)
+#         user = jwt_auth.get_user(validated_token)
 
-        shop_id = user.shop_id
-        if not shop_id:
-            return Response(
-                {"error": "Shop ID not found"}, status=status.HTTP_400_BAD_REQUEST
-            )
+#         shop_id = user.shop_id
+#         if not shop_id:
+#             return Response(
+#                 {"error": "Shop ID not found"}, status=status.HTTP_400_BAD_REQUEST
+#             )
 
-        shop_url = user.shop_url
-        if not shop_url:
-            return Response(
-                {"error": "Shop URL not found in session"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+#         shop_url = user.shop_url
+#         if not shop_url:
+#             return Response(
+#                 {"error": "Shop URL not found in session"},
+#                 status=status.HTTP_400_BAD_REQUEST,
+#             )
 
-        collection_id = request.data.get("collection_id")
-        if not collection_id:
-            return Response(
-                {"error": "Collection ID is required"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+#         collection_id = request.data.get("collection_id")
+#         if not collection_id:
+#             return Response(
+#                 {"error": "Collection ID is required"},
+#                 status=status.HTTP_400_BAD_REQUEST,
+#             )
 
-        products = fetch_products_by_collection_with_img(shop_url, collection_id)
+#         products = fetch_products_by_collection_with_img(shop_url, collection_id)
 
-        try:
-            client_collection = ClientCollections.objects.get(
-                collection_id=collection_id
-            )
-        except ClientCollections.DoesNotExist:
-            return Response(
-                {"error": "Collection not found"}, status=status.HTTP_404_NOT_FOUND
-            )
+#         try:
+#             client_collection = ClientCollections.objects.get(
+#                 collection_id=collection_id
+#             )
+#         except ClientCollections.DoesNotExist:
+#             return Response(
+#                 {"error": "Collection not found"}, status=status.HTTP_404_NOT_FOUND
+#             )
 
-        pinned_products = client_collection.pinned_products or []
-        products_filtered = [
-            {
-                "id": product["id"],
-                "title": product["title"],
-                "handle": product["handle"],
-                "images": product.get("images", []),
-            }
-            for product in products
-            if product["id"] not in pinned_products
-        ]
+#         pinned_products = client_collection.pinned_products or []
+#         products_filtered = [
+#             {
+#                 "id": product["id"],
+#                 "title": product["title"],
+#                 "handle": product["handle"],
+#                 "images": product.get("images", []),
+#             }
+#             for product in products
+#             if product["id"] not in pinned_products
+#         ]
 
-        return Response(
-            {"products": products_filtered, "pinned_products": pinned_products},
-            status=status.HTTP_200_OK,
-        )
+#         return Response(
+#             {"products": products_filtered, "pinned_products": pinned_products},
+#             status=status.HTTP_200_OK,
+#         )
 
-    except InvalidToken:
-        return Response({"error": "Invalid token"}, status=status.HTTP_401_UNAUTHORIZED)
+#     except InvalidToken:
+#         return Response({"error": "Invalid token"}, status=status.HTTP_401_UNAUTHORIZED)
 
-    except Exception as e:
-        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+#     except Exception as e:
+#         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(["POST"])
