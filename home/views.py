@@ -8,6 +8,7 @@ from django.shortcuts import redirect
 from shopify_app.decorators import shop_login_required
 from django.http import JsonResponse
 from datetime import datetime
+from django.utils import timezone
 import pytz
 from django.views.decorators.http import require_GET
 import shopify
@@ -19,6 +20,8 @@ from shopify_app.models import (
     SortingPlan,
     SortingAlgorithm,
     ClientCollections,
+    ClientProducts,
+    ClientGraph
 )
 from shopify_app.api import (
     fetch_collections,
@@ -35,9 +38,10 @@ from .strategies import (
     promote_high_variant_availability,
     clearance_sale,
     promote_high_revenue_new_products,
+    remove_pinned_products,
     push_out_of_stock_down,
-    push_pinned_out_of_stock_down,
-    push_pinned_products_to_top,
+    segregate_pinned_products,
+    push_pinned_products_to_top
 )
 
 from django.shortcuts import get_object_or_404
@@ -63,7 +67,6 @@ import os
 from dotenv import load_dotenv
 
 load_dotenv()
-
 
 
 @shop_login_required
@@ -141,7 +144,6 @@ def index(request):
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
 
-
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_client_info(request):  # working and tested
@@ -175,10 +177,12 @@ def get_client_info(request):  # working and tested
                 collection_id = int(collection["id"].split("/")[-1])
                 collection_name = collection["title"]
                 products_count = collection["products_count"]
+                updated_at = collection["updated_at"]
+                
                 default_algo = SortingAlgorithm.objects.get(algo_id=1)
 
                 client_collection, created = ClientCollections.objects.get_or_create(
-                    collectionid=collection_id,
+                    collection_id=collection_id,
                     shop_id=shop_id,
                     defaults={
                         "collection_name": collection_name,
@@ -186,13 +190,16 @@ def get_client_info(request):  # working and tested
                         "status": False,
                         "algo": default_algo,
                         "parameters_used": {},
-                        "lookback_periods": None,
+                        "updated_at": updated_at,  
+                        "refetch": True,  
                     },
                 )
 
                 if not created:
                     client_collection.collection_name = collection_name
                     client_collection.products_count = products_count
+                    client_collection.updated_at = updated_at  
+                    client_collection.refetch = True  
                     client_collection.save()
 
             return Response(
@@ -219,45 +226,87 @@ def get_client_info(request):  # working and tested
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-# @api_view(['GET'])
-# @csrf_protect
-# def get_collections(request):
-#     shop_url = request.session.get('shopify', {}).get('shop_url')
 
-#     if not shop_url:
-#         return Response({'error': 'Shop URL not found in session'}, status=status.HTTP_400_BAD_REQUEST)
-
-#     try:
-#         collections = fetch_collections(shop_url)
-#         return Response({'collections': collections}, status=status.HTTP_200_OK)
-#     except Exception as e:
-#         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-@shop_login_required
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 @csrf_protect
 def get_products(request):
-    shop_url = request.session.get("shopify", {}).get("shop_url")
-    collection_id = request.GET.get("collection_id")
-
-    if not shop_url:
+    auth_header = request.headers.get("Authorization", None)
+    if auth_header is None:
         return Response(
-            {"error": "Shop URL not found in session"},
-            status=status.HTTP_400_BAD_REQUEST,
+            {"error": "Authorization header missing"},
+            status=status.HTTP_401_UNAUTHORIZED,
         )
-
-    if not collection_id:
-        return Response(
-            {"error": "Collection ID is required"}, status=status.HTTP_400_BAD_REQUEST
-        )
-
     try:
-        products = fetch_products_by_collection(shop_url, collection_id)
-        return Response({"products": products}, status=status.HTTP_200_OK)
+        token = auth_header.split(" ")[1]
+        jwt_auth = JWTAuthentication()
+
+        validated_token = jwt_auth.get_validated_token(token)
+        user = jwt_auth.get_user(validated_token)
+
+        shop_id = user.shop_id
+        print(shop_id)
+
+        if not shop_id:
+            return Response(
+                {"error": "Shop ID not found in session"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        collection_id = request.data.get("collection_id")
+        
+        try:
+            collection=ClientCollections.objects.filter(
+                shop_id = shop_id, collection_id = collection_id
+            ).first()
+
+            if not collection:
+                return Response(
+                    {"error":"Collection not found"}, status=status.HTTP_404_NOT_FOUND
+                )
+            
+            client_products = ClientProducts.objects.filter(collection_id =collection_id)
+
+            response_products = [
+                {
+                    "id": product.product_id,
+                    "title": product.product_name,
+                    "total_inventory":product.total_inventory,
+                    "image_link": product.image_link,
+                }
+                for product in client_products
+            ]
+
+            return Response({"products": response_products}, status=status.HTTP_200_OK)
+        except:
+            return Response()
+        
+    except InvalidToken:
+        return Response({"error": "Invalid token"}, status=status.HTTP_401_UNAUTHORIZED)
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
+def update_or_create_client_products(products, shop_id, collection_id):
+    for product in products:
+        ClientProducts.objects.update_or_create(
+            product_id=product['id'],
+            defaults={
+                'shop_id': shop_id,
+                'collection_id': collection_id,
+                'product_name': product['title'],
+                'image_link': product['image'],
+                'created_at': product['created_at'],
+                'tags': product['tags'],
+                'updated_at': product['updated_at'],
+                'published_at': product['published_at'],
+                'total_revenue': product['total_revenue'],
+                'variant_count': product['variant_count'],
+                'variant_availability': product['variant_availability'],
+                'total_sold_item': product['total_sold_item'],
+                'sales_velocity': product['sales_velocity'],
+            }
+        )
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
@@ -293,7 +342,7 @@ def update_product_order(request):
         algo_id = request.data.get("algo_id")
 
         client_collections = ClientCollections.objects.get(
-            shop_id=shop_id, collectionid=collection_id
+            shop_id=shop_id, collection_id=collection_id
         )
 
         if not collection_id:
@@ -314,7 +363,43 @@ def update_product_order(request):
                 {"error": "Access token not found for this client"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        
+        parameters_used = client_collections.parameters_used
+        pinned_product_ids = client_collections.pinned_products
 
+        days = parameters_used.get("days", 7)
+        # days = 7
+        percentile = parameters_used.get("percentile", 100)
+        # percentile = 100
+        variant_threshold = parameters_used.get("variant_threshold", 5.0)
+        # variant_threshold = None
+
+        try:
+            client_collections = ClientCollections.objects.get(
+                shop_id=shop_id, collection_id=collection_id
+            )
+            products = fetch_products_by_collection(client.shop_url, collection_id, days)
+            if not products:
+                return Response(
+                    {"error": "Failed to fetch products for the collection"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+            update_or_create_client_products(products, shop_id, collection_id)
+            
+        except ClientCollections.DoesNotExist:
+            products = fetch_products_by_collection(client.shop_url, collection_id, days)
+            if not products:
+                return Response(
+                    {"error": "Failed to fetch products for the collection"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+            client_collections = ClientCollections.objects.create(
+                shop_id=shop_id,
+                collection_id=collection_id,
+                updated_at=timezone.now() 
+            )
+            update_or_create_client_products(products, shop_id, collection_id)
+            
         sort_function = ALGO_ID_TO_FUNCTION.get(algo_id)
         if not sort_function:
             return Response(
@@ -322,17 +407,12 @@ def update_product_order(request):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        parameters_used = client_collections.parameters_used
-        pinned_product_ids = client_collections.pinned_products
 
-        # days = parameters_used.get("days", 7)
-        days = 7    
-        # percentile = parameters_used.get("percentile", 10)
-        percentile = 100
-        # variant_threshold = parameters_used.get("variant_threshold", 5.0)
-        variant_threshold = None
-
-        products = fetch_products_by_collection(client.shop_url, collection_id, days)
+        products = ClientProducts.objects.filter(shop_id=shop_id, collection_id=collection_id).values(
+            "product_id", "product_name", "total_sold_item", "image_link",
+            "tags", "variant_count", "variant_availability", "total_revenue",
+            "sales_velocity"
+        )
 
         print(products)
         if not products:
@@ -341,49 +421,50 @@ def update_product_order(request):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
         else:
-            print("products ah rhe")
+            print("products ah gye upr") 
+        
+        if pinned_product_ids:
+            products, pinned_products = remove_pinned_products(
+                products, pinned_product_ids
+            )
 
-        sorted_product_ids = sort_function(
+        sorted_products = sort_function(
             products,
             days=days,
             percentile=percentile,
             variant_threshold=variant_threshold,
         )
 
-        if sorted_product_ids:
-            print("product hai sorted wale")
+        if sorted_products:
+            print("product hai sorted wale niche")
 
-        print(sorted_product_ids)
-
-        print("0")
-        # print("pinned product array", pinned_product_ids)
-        # print("before pin product at top:",sorted_product_ids)
-        if pinned_product_ids:
-            sorted_product_ids = push_pinned_products_to_top(
-                sorted_product_ids, pinned_product_ids
-            )
-
-        print(sorted_product_ids)
-        # print("after pin product at top:",sorted_product_ids)    
+        print(sorted_products)
+  
         if client_collections.pinned_out_of_stock_down:
-            print("1")
-            sorted_product_ids = push_pinned_out_of_stock_down(
-                sorted_product_ids, pinned_product_ids
-            )
+            pinned_products, ofs_pinned = segregate_pinned_products(pinned_products)
 
-        # print(sorted_product_ids)
         if client_collections.out_of_stock_down:
-            print("2")
-            sorted_product_ids = push_out_of_stock_down(sorted_product_ids, pinned_product_ids)
+            sorted_products, ofs_sorted_products = push_out_of_stock_down(sorted_products)
 
 
-        # print("sorted_products_id:",sorted_product_ids)
-        pid = pid_extractor(sorted_product_ids)
-        print(pid)
-        print("4")
+        if client_collections.pinned_out_of_stock_down:
+            if client_collections.out_of_stock_down:
+                sorted_products = pinned_products + sorted_products + ofs_sorted_products + ofs_pinned
+            else:
+                sorted_products = pinned_products + sorted_products + ofs_pinned
+        else:
+            if client_collections.out_of_stock_down:
+                sorted_products = pinned_products + sorted_products + ofs_sorted_products
+            else:
+                sorted_products = pinned_products + sorted_products
+
+        pid = pid_extractor(sorted_products)
+        print("pid:",pid)
+
         success = update_collection_products_order(
             client.shop_url, access_token, collection_id, pid
         )
+
         if success:
             return Response({"success": True}, status=status.HTTP_200_OK)
         else:
@@ -404,7 +485,7 @@ def pid_extractor(products):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def available_sorts(request):  # working and tested
+def available_sorts(request):  
     auth_header = request.headers.get("Authorization", None)
     if auth_header is None:
         return JsonResponse(
@@ -512,7 +593,7 @@ def last_active_collections(request):  # working and tested
 
                 collections_data.append(
                     {
-                        "collection_id": collection.collectionid,
+                        "collection_id": collection.collection_id,
                         "collection_name": collection.collection_name,
                         "product_count": collection.products_count,
                         "sort_date": collection.sort_date,
@@ -576,6 +657,7 @@ def get_client_collections(request, client_id):  # working and tested
         shop_url = user.shop_url
         shop_id = user.shop_id
 
+
         if not shop_url:
             return Response(
                 {"error": "Shop URL not found in session"},
@@ -592,7 +674,7 @@ def get_client_collections(request, client_id):  # working and tested
 
             client_collections = ClientCollections.objects.filter(
                 shop_id=shop_id
-            ).order_by("collectionid")
+            ).order_by("collection_id")
 
             paginator = ClientCollectionsPagination()
             paginated_collections = paginator.paginate_queryset(
@@ -608,7 +690,7 @@ def get_client_collections(request, client_id):  # working and tested
                 collections_data.append(
                     {
                         "collection_name": collection.collection_name,
-                        "collection_id": collection.collectionid,
+                        "collection_id": collection.collection_id,
                         "status": collection.status,
                         "algo_id": algo_id,
                     }
@@ -729,7 +811,7 @@ def search_collections(request, client_id):  # working and tested
                 collections_data.append(
                     {
                         "collection_name": collection.collection_name,
-                        "collection_id": collection.collectionid,
+                        "collection_id": collection.collection_id,
                         "status": collection.status,
                     }
                 )
@@ -765,6 +847,7 @@ def update_collection(request, collection_id):  # working not tested
         user = jwt_auth.get_user(validated_token)
 
         shop_id = user.shop_id
+        
         if not shop_id:
             return Response(
                 {"error": "Shop ID not found in session"},
@@ -773,7 +856,7 @@ def update_collection(request, collection_id):  # working not tested
 
         # client = Client.objects.get(shop_id=shop_id)
         collection = ClientCollections.objects.get(
-            shop_id=shop_id, collectionid=collection_id
+            shop_id=shop_id, collection_id=collection_id
         )
 
         print(collection)
@@ -785,7 +868,8 @@ def update_collection(request, collection_id):  # working not tested
 
         if status_value is not None:
             collection.status = status_value
-            updated = True  
+            print("status", status_value)
+            updated = True
 
         if algo_id is not None:
             try:
@@ -794,15 +878,32 @@ def update_collection(request, collection_id):  # working not tested
                 updated = True
             except SortingAlgorithm.DoesNotExist:
                 return Response(
-                    {"error": "Algorithm not found"}, status=status.HTTP_404_NOT_FOUND
+                            {"error": "Algorithm not found"}, status=status.HTTP_404_NOT_FOUND
                 )
-
+        
+        days=14
         if updated:
             collection.save()
-            return Response(
-                {"message": "Collection updated successfully"},
-                status=status.HTTP_200_OK,
-            )
+            if collection.status:
+                shop_url = user.shop_url
+                product_fetch_result = fetch_and_store_products(shop_url, shop_id,collection_id, days)
+
+                if "error" in product_fetch_result:
+                    return Response(
+                        {"error": product_fetch_result["error"]},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    )
+
+                return Response(
+                    {"message": "Collection updated and products fetched successfully", 
+                     "products_fetched": product_fetch_result["products_fetched"]},
+                    status=status.HTTP_200_OK,
+                )
+            else:
+                return Response(
+                    {"message": "Collection updated successfully"},
+                    status=status.HTTP_200_OK,
+                )
         else:
             return Response(
                 {"error": "No valid fields provided to update"},
@@ -818,17 +919,73 @@ def update_collection(request, collection_id):  # working not tested
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+def fetch_and_store_products(shop_url, shop_id, collection_id, days):
+    try:
+        products = fetch_products_by_collection(shop_url, collection_id, days)
+        print(products)
+        total_revenue = 0  
 
+        if products:
+            print("Products fetched successfully:", len(products))
+
+        for product in products:
+            product_id = product.get("id")
+            product_name = product.get("title", "")
+            image_link = product.get("image")
+            created_at = product.get("listed_date", "")
+            updated_at = product.get("updated_at", "")
+            published_at = product.get("published_at", "")
+            total_inventory = product.get("totalInventory", 0)
+            tags = product.get("tags", [])
+            variant_count = product.get("variants_count", 0)
+            variant_availability = product.get("variant_availability", 0)
+            revenue = product.get("revenue", 0.00)  
+            sales_velocity = product.get("sales_velocity", 0.00)
+            total_sold_units = product.get("total_sold_units", 0)
+
+            total_revenue += revenue
+
+            ClientProducts.objects.update_or_create(
+                product_id=product_id,
+                defaults={
+                    'shop_id': shop_id,
+                    'collection_id': collection_id,
+                    'product_name': product_name,
+                    'image_link': image_link,
+                    'created_at': created_at,   
+                    'tags': tags,
+                    'updated_at': updated_at,
+                    'published_at': published_at,
+                    'total_revenue': revenue,
+                    'variant_count': variant_count,
+                    'variant_availability': variant_availability,
+                    'total_inventory': total_inventory,
+                    'total_sold_units': total_sold_units,
+                    'sales_velocity': sales_velocity
+                }
+            )
+
+        
+        ClientCollections.objects.filter(collection_id=collection_id, shop_id=shop_id).update(
+            total_revenue=total_revenue
+        )
+
+        return {"products_fetched": len(products), "total_revenue": total_revenue}
+    
+    except Exception as e:
+        print(f"Error storing products: {str(e)}")
+        return {"error": str(e)}
+    
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def update_collection_settings(request):  # working and tested
     try:
         data = request.data
-        collectionid = data.get("collectionid")
+        collection_id = data.get("collection_id")
 
-        if not collectionid:
+        if not collection_id:
             return Response(
-                {"error": "collectionid is required"},
+                {"error": "collection_id is required"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -853,7 +1010,7 @@ def update_collection_settings(request):  # working and tested
 
         client = Client.objects.get(shop_id=shop_id)
         collection = ClientCollections.objects.get(
-            collectionid=collectionid, shop_id=shop_id
+            collection_id=collection_id, shop_id=shop_id
         )
 
         if "out_of_stock_down" in data:
@@ -873,7 +1030,7 @@ def update_collection_settings(request):  # working and tested
         return Response(
             {
                 "message": "Collection settings updated successfully",
-                "collectionid": collection.collectionid,
+                "collection_id": collection.collection_id,
                 "shop_id": shop_id,
                 "out_of_stock_down": collection.out_of_stock_down,
                 "pinned_out_of_stock_down": collection.pinned_out_of_stock_down,
@@ -977,23 +1134,23 @@ def fetch_last_sort_date(request):  # working and tested
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        collectionid = request.GET.get("collectionid")
+        collection_id = request.GET.get("collection_id")
 
-        if not collectionid:
+        if not collection_id:
             return Response(
-                {"error": "collectionid is required"},
+                {"error": "collection_id is required"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         client = Client.objects.get(shop_id=shop_id)
 
         collection = ClientCollections.objects.get(
-            collectionid=collectionid, shop_id=shop_id
+            collection_id=collection_id, shop_id=shop_id
         )
 
         return Response(
             {
-                "collectionid": collection.collectionid,
+                "collection_id": collection.collection_id,
                 "sort_date": collection.sort_date,
             },
             status=status.HTTP_200_OK,
@@ -1042,13 +1199,13 @@ def get_and_update_collections(request):  # working and tested
 
             for collection in collections:
                 collection_data = {
-                    "collectionid": collection["id"].split("/")[-1],
+                    "collection_id": collection["id"].split("/")[-1],
                     "collection_name": collection["title"],
                     "products_count": collection["products_count"],
                 }
 
                 ClientCollections.objects.update_or_create(
-                    collectionid=collection_data["collectionid"],
+                    collection_id=collection_data["collection_id"],
                     shop_id=shop_id,
                     defaults={
                         "collection_name": collection_data["collection_name"],
@@ -1074,75 +1231,75 @@ def get_and_update_collections(request):  # working and tested
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-@api_view(["POST"])
-@permission_classes([IsAuthenticated])
-def get_products(request):
-    auth_header = request.headers.get("Authorization", None)
-    if auth_header is None:
-        return Response(
-            {"error": "Authorization header missing"},
-            status=status.HTTP_401_UNAUTHORIZED,
-        )
+# @api_view(["POST"])
+# @permission_classes([IsAuthenticated])
+# def get_products(request):
+#     auth_header = request.headers.get("Authorization", None)
+#     if auth_header is None:
+#         return Response(
+#             {"error": "Authorization header missing"},
+#             status=status.HTTP_401_UNAUTHORIZED,
+#         )
 
-    try:
-        token = auth_header.split(" ")[1]
-        jwt_auth = JWTAuthentication()
-        validated_token = jwt_auth.get_validated_token(token)
-        user = jwt_auth.get_user(validated_token)
+#     try:
+#         token = auth_header.split(" ")[1]
+#         jwt_auth = JWTAuthentication()
+#         validated_token = jwt_auth.get_validated_token(token)
+#         user = jwt_auth.get_user(validated_token)
 
-        shop_id = user.shop_id
-        if not shop_id:
-            return Response(
-                {"error": "Shop ID not found"}, status=status.HTTP_400_BAD_REQUEST
-            )
+#         shop_id = user.shop_id
+#         if not shop_id:
+#             return Response(
+#                 {"error": "Shop ID not found"}, status=status.HTTP_400_BAD_REQUEST
+#             )
 
-        shop_url = user.shop_url
-        if not shop_url:
-            return Response(
-                {"error": "Shop URL not found in session"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+#         shop_url = user.shop_url
+#         if not shop_url:
+#             return Response(
+#                 {"error": "Shop URL not found in session"},
+#                 status=status.HTTP_400_BAD_REQUEST,
+#             )
 
-        collection_id = request.data.get("collection_id")
-        if not collection_id:
-            return Response(
-                {"error": "Collection ID is required"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+#         collection_id = request.data.get("collection_id")
+#         if not collection_id:
+#             return Response(
+#                 {"error": "Collection ID is required"},
+#                 status=status.HTTP_400_BAD_REQUEST,
+#             )
 
-        products = fetch_products_by_collection_with_img(shop_url, collection_id)
+#         products = fetch_products_by_collection_with_img(shop_url, collection_id)
 
-        try:
-            client_collection = ClientCollections.objects.get(
-                collectionid=collection_id
-            )
-        except ClientCollections.DoesNotExist:
-            return Response(
-                {"error": "Collection not found"}, status=status.HTTP_404_NOT_FOUND
-            )
+#         try:
+#             client_collection = ClientCollections.objects.get(
+#                 collection_id=collection_id
+#             )
+#         except ClientCollections.DoesNotExist:
+#             return Response(
+#                 {"error": "Collection not found"}, status=status.HTTP_404_NOT_FOUND
+#             )
 
-        pinned_products = client_collection.pinned_products or []
-        products_filtered = [
-            {
-                "id": product["id"],
-                "title": product["title"],
-                "handle": product["handle"],
-                "images": product.get("images", []),
-            }
-            for product in products
-            if product["id"] not in pinned_products
-        ]
+#         pinned_products = client_collection.pinned_products or []
+#         products_filtered = [
+#             {
+#                 "id": product["id"],
+#                 "title": product["title"],
+#                 "handle": product["handle"],
+#                 "images": product.get("images", []),
+#             }
+#             for product in products
+#             if product["id"] not in pinned_products
+#         ]
 
-        return Response(
-            {"products": products_filtered, "pinned_products": pinned_products},
-            status=status.HTTP_200_OK,
-        )
+#         return Response(
+#             {"products": products_filtered, "pinned_products": pinned_products},
+#             status=status.HTTP_200_OK,
+#         )
 
-    except InvalidToken:
-        return Response({"error": "Invalid token"}, status=status.HTTP_401_UNAUTHORIZED)
+#     except InvalidToken:
+#         return Response({"error": "Invalid token"}, status=status.HTTP_401_UNAUTHORIZED)
 
-    except Exception as e:
-        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+#     except Exception as e:
+#         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(["POST"])
@@ -1185,7 +1342,7 @@ def update_pinned_products(request):  # working and tested
 
         try:
             client_collection = ClientCollections.objects.get(
-                collectionid=collection_id
+                collection_id=collection_id
             )
         except ClientCollections.DoesNotExist:
             return Response(
@@ -1346,4 +1503,20 @@ def update_default_algo(request):  # working and tested
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+#################################################################################################################################################################
 
+# from .graph import calculate_total_revenue
+
+# @api_view(['GET'])
+# def get_graph(request):
+#     date = request.GET.get('date')
+    
+#     revenue_data, top_products_by_revenue, top_products_by_sold_units = calculate_total_revenue(date)
+
+#     response_data = {
+#         'date': date,
+#         'total_revenue': revenue_data['total_revenue'],
+#         'top_products_by_revenue': top_products_by_revenue,
+#         'top_products_by_sold_units': top_products_by_sold_units,
+#     }
+#     return Response(response_data)
