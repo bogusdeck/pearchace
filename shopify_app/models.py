@@ -93,7 +93,7 @@ class Client(AbstractBaseUser):
         return self.is_superuser
     
 #done
-class ClientCollections(models.Model):  
+class ClientCollections(models.Model):
     id = models.BigAutoField(primary_key=True)
     collection_id = models.BigIntegerField(unique=True)
     shop_id = models.CharField(max_length=255)
@@ -110,12 +110,14 @@ class ClientCollections(models.Model):
     pinned_out_of_stock_down = models.BooleanField(default=False)
     new_out_of_stock_down = models.BooleanField(default=False)
     refetch = models.BooleanField(default=True)
-
+    collection_total_revenue = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)  
+    
     class Meta:
-        unique_together = ('shop_id', 'collection_id')  
+        unique_together = ('shop_id', 'collection_id')
 
     def __str__(self):
         return f"{self.collection_name} (ID: {self.collection_id}) for shop_id {self.shop_id} - Sorted on {self.sort_date}"
+
     
 #new
 class ClientProducts(models.Model):
@@ -234,7 +236,13 @@ class PlanHistory(models.Model):
         return f"Plan History {self.id} for {self.client.shop_name}"
     
 
-
 #clientstrategies
-#clientgraphs
+class ClientGraph(models.Model):
+    client = models.ForeignKey(Client, on_delete=models.CASCADE, to_field='shop_id')
+    date = models.DateField()
+    revenue = models.DecimalField(max_digits=15, decimal_places=2)
+
+    def __str__(self):
+        return f"Graph for {self.client.shop_id} on {self.date}"
+
 

@@ -20,7 +20,8 @@ from shopify_app.models import (
     SortingPlan,
     SortingAlgorithm,
     ClientCollections,
-    ClientProducts
+    ClientProducts,
+    ClientGraph
 )
 from shopify_app.api import (
     fetch_collections,
@@ -28,7 +29,6 @@ from shopify_app.api import (
     fetch_products_by_collection_with_img,
     update_collection_products_order,
     fetch_client_data,
-    collection_date_check,
 )
 from .strategies import (
     promote_new,
@@ -253,8 +253,8 @@ def get_products(request):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        collection_id = request.GET.get("collection_id")
-
+        collection_id = request.data.get("collection_id")
+        
         try:
             collection=ClientCollections.objects.filter(
                 shop_id = shop_id, collection_id = collection_id
@@ -364,6 +364,9 @@ def update_product_order(request):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         
+        parameters_used = client_collections.parameters_used
+        pinned_product_ids = client_collections.pinned_products
+
         days = parameters_used.get("days", 7)
         # days = 7
         percentile = parameters_used.get("percentile", 100)
@@ -382,17 +385,6 @@ def update_product_order(request):
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 )
             update_or_create_client_products(products, shop_id, collection_id)
-            # # latest_updated_at, latest_published_at = collection_date_check(client.shop_url, collection_id)
-            # # if latest_updated_at > client_collections.updated_at:
-            #     products = fetch_products_by_collection(client.shop_url, collection_id, days)
-            #     if not products:
-            #         return Response(
-            #             {"error": "Failed to fetch products for the collection"},
-            #             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            #         )
-            #     update_or_create_client_products(products, shop_id, collection_id)
-            # else:
-            #     return Response({"message": "No updates in collection."}, status=status.HTTP_200_OK)
             
         except ClientCollections.DoesNotExist:
             products = fetch_products_by_collection(client.shop_url, collection_id, days)
@@ -407,7 +399,7 @@ def update_product_order(request):
                 updated_at=timezone.now() 
             )
             update_or_create_client_products(products, shop_id, collection_id)
-
+            
         sort_function = ALGO_ID_TO_FUNCTION.get(algo_id)
         if not sort_function:
             return Response(
@@ -415,8 +407,6 @@ def update_product_order(request):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        parameters_used = client_collections.parameters_used
-        pinned_product_ids = client_collections.pinned_products
 
         products = ClientProducts.objects.filter(shop_id=shop_id, collection_id=collection_id).values(
             "product_id", "product_name", "total_sold_item", "image_link",
@@ -888,14 +878,15 @@ def update_collection(request, collection_id):  # working not tested
                 updated = True
             except SortingAlgorithm.DoesNotExist:
                 return Response(
-                    {"error": "Algorithm not found"}, status=status.HTTP_404_NOT_FOUND
+                            {"error": "Algorithm not found"}, status=status.HTTP_404_NOT_FOUND
                 )
-
+        
+        days=14
         if updated:
             collection.save()
             if collection.status:
                 shop_url = user.shop_url
-                product_fetch_result = fetch_and_store_products(shop_url, shop_id,collection_id)
+                product_fetch_result = fetch_and_store_products(shop_url, shop_id,collection_id, days)
 
                 if "error" in product_fetch_result:
                     return Response(
@@ -931,15 +922,16 @@ def update_collection(request, collection_id):  # working not tested
 def fetch_and_store_products(shop_url, shop_id, collection_id, days):
     try:
         products = fetch_products_by_collection(shop_url, collection_id, days)
-        # print("products",products)
+        print(products)
+        total_revenue = 0  
 
-        if products: 
-            print("products ah gye")
+        if products:
+            print("Products fetched successfully:", len(products))
 
         for product in products:
-            product_id = product["id"]
+            product_id = product.get("id")
             product_name = product.get("title", "")
-            image_link = product.get("image", [{}])[0].get("src", "") if product.get("images") else ""
+            image_link = product.get("image")
             created_at = product.get("listed_date", "")
             updated_at = product.get("updated_at", "")
             published_at = product.get("published_at", "")
@@ -947,35 +939,43 @@ def fetch_and_store_products(shop_url, shop_id, collection_id, days):
             tags = product.get("tags", [])
             variant_count = product.get("variants_count", 0)
             variant_availability = product.get("variant_availability", 0)
-            revenue = product.get("revenue", 0.00)
+            revenue = product.get("revenue", 0.00)  
             sales_velocity = product.get("sales_velocity", 0.00)
-            total_sold_units = product.get("total_sold_units", 0.00)
+            total_sold_units = product.get("total_sold_units", 0)
 
-            if not ClientProducts.objects.filter(product_id=product_id).exists():
-                ClientProducts.objects.create(
-                    product_id=product_id,
-                    shop_id=shop_id,
-                    collection_id=collection_id,
-                    product_name=product_name,
-                    image_link=image_link,
-                    created_at=created_at,
-                    tags=tags,
-                    updated_at=updated_at,
-                    published_at=published_at,
-                    total_revenue=revenue,
-                    variant_count=variant_count,
-                    variant_availability=variant_availability,
-                    total_inventory=total_inventory,
-                    total_sold_units=total_sold_units,
-                    sales_velocity=sales_velocity  
-                )
+            total_revenue += revenue
 
-        return {"products_fetched": len(products)}
+            ClientProducts.objects.update_or_create(
+                product_id=product_id,
+                defaults={
+                    'shop_id': shop_id,
+                    'collection_id': collection_id,
+                    'product_name': product_name,
+                    'image_link': image_link,
+                    'created_at': created_at,   
+                    'tags': tags,
+                    'updated_at': updated_at,
+                    'published_at': published_at,
+                    'total_revenue': revenue,
+                    'variant_count': variant_count,
+                    'variant_availability': variant_availability,
+                    'total_inventory': total_inventory,
+                    'total_sold_units': total_sold_units,
+                    'sales_velocity': sales_velocity
+                }
+            )
+
+        
+        ClientCollections.objects.filter(collection_id=collection_id, shop_id=shop_id).update(
+            total_revenue=total_revenue
+        )
+
+        return {"products_fetched": len(products), "total_revenue": total_revenue}
     
     except Exception as e:
+        print(f"Error storing products: {str(e)}")
         return {"error": str(e)}
-
-
+    
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def update_collection_settings(request):  # working and tested
@@ -1503,4 +1503,20 @@ def update_default_algo(request):  # working and tested
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+#################################################################################################################################################################
 
+from .graph import calculate_total_revenue
+
+@api_view(['GET'])
+def get_graph(request):
+    date = request.GET.get('date')
+    
+    revenue_data, top_products_by_revenue, top_products_by_sold_units = calculate_total_revenue(date)
+
+    response_data = {
+        'date': date,
+        'total_revenue': revenue_data['total_revenue'],
+        'top_products_by_revenue': top_products_by_revenue,
+        'top_products_by_sold_units': top_products_by_sold_units,
+    }
+    return Response(response_data)
