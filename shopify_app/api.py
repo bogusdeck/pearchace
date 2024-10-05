@@ -515,6 +515,8 @@ def update_collection_products_order(
 
 #########################
 
+
+##not needed now 
 def fetch_order_for_graph(shop_url, start_date, end_date):
     client = _get_client(shop_url)
     if not client:
