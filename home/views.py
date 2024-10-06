@@ -1271,7 +1271,6 @@ def update_default_algo(request):  # working and tested
                 {"error": "Shop ID not found"}, status=status.HTTP_400_BAD_REQUEST
             )
 
-        shop_id = request.data.get("shop_id")
         algo_id = request.data.get("algo_id")
 
         if not shop_id or not algo_id:
@@ -1314,19 +1313,80 @@ def update_default_algo(request):  # working and tested
 
 
 #################################################################################################################################################################
+#################################################################################################################################################################
+
 
 # from .graph import calculate_total_revenue
 
-# @api_view(['GET'])
-# def get_graph(request):
-#     date = request.GET.get('date')
+@api_view(['GET'])
+def get_graph(request):
+    date = request.GET.get('date')
     
-#     revenue_data, top_products_by_revenue, top_products_by_sold_units = calculate_total_revenue(date)
+    # revenue_data, top_products_by_revenue, top_products_by_sold_units = calculate_total_revenue(date)
 
-#     response_data = {
-#         'date': date,
-#         'total_revenue': revenue_data['total_revenue'],
-#         'top_products_by_revenue': top_products_by_revenue,
-#         'top_products_by_sold_units': top_products_by_sold_units,
-#     }
-#     return Response(response_data)
+    # response_data = {
+    #     'date': date,
+    #     'total_revenue': revenue_data['total_revenue'],
+    #     'top_products_by_revenue': top_products_by_revenue,
+    #     'top_products_by_sold_units': top_products_by_sold_units,
+    # }
+    response_data = "hi hi hi graph nhi hai bhai"
+    return Response(response_data)
+
+
+########## Collection manager ############
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated]) #written not tested yet
+def preview_products(request):
+    auth_header = request.headers.get("Authorization", None)
+    if auth_header is None:
+        return Response(
+            {"error": "Authorization header missing"},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    try:
+        token=auth_header.split("")[1]
+        jwt_auth = JWTAuthentication()
+        validated_token = jwt_auth.get_validated_token(token)
+        user = jwt_auth.get_user(validated_token)
+        
+        shop_id = user.shop_id
+        if not shop_id:
+            return Response(
+                {"error":"Shop ID not found"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        collection_id = request.data.get("collection_id")
+
+        if not collection_id:
+            return Response(
+                {'error':"Collection id is not provided"},status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            products = ClientProducts.object.filter(
+                shop_id=shop_id, collection_id=collection_id
+            ).order_by('position_in_collection').values(
+                'product_id','product_name','image_link','total_inventory'
+            )
+
+            product_data = {
+                product['product_id']: {
+                    'product_name': product['product_name'],
+                    'image_link': product['image_link'],
+                    'total_inventory': product['total_inventory']
+                }
+                for product in products
+            }
+
+            return Response(product_data, status=200)
+        except ClientProducts.DoesNotExist:
+            return Response({'error':'No products found for this collection'}, status=404)
+    
+    except InvalidToken:
+        return Response({"error": "Invalid token"}, status=status.HTTP_401_UNAUTHORIZED)
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
