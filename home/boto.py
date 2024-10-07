@@ -1,42 +1,47 @@
+import json
 import boto3
-from datetime import datetime, timedelta
+from shopify_app.models import ClientCollections  #
 
-def create_cloudwatch_rule(client, schedule_expression, lambda_arn):
+def create_cloudwatch_rule(client, schedule_expression, lambda_arn,token):
     print("cloudwatch function running")
     cloudwatch_events = boto3.client('events', region_name='us-east-1')
-    print("yha tk chl rha")
 
-    rule_name = f'sort_{client.shop_id}_collections'
-    
+    try:
+        active_collections = ClientCollections.objects.filter(shop_id=client.shop_id, status=True)
 
-    response = cloudwatch_events.put_rule(
-        Name=rule_name,
-        ScheduleExpression=schedule_expression,  
-        State='ENABLED'
-    )
+        for collection in active_collections:
+            collection_id = str(collection.collection_id)
+            algo_id = collection.algo_id
+            rule_name = f'sort_{client.shop_id}_collection_{collection_id}'
 
-    print("cloudwatch rule put ho gya")
+            # Create a CloudWatch rule
+            response = cloudwatch_events.put_rule(
+                Name=rule_name,
+                ScheduleExpression=schedule_expression,
+                State='ENABLED'
+            )
 
-    
-    target_response = cloudwatch_events.put_targets(
-        Rule=rule_name,
-        Targets=[
-            {
-                'Id': '1',
-                'Arn': lambda_arn,
-                'Input': json.dumps({
-                    "shop_id": client.shop_id,
-                    "collection_id": client.collection_id,
-                    "algo_id": client.algo_id,
-                    "token": client.access_token 
-                })
-            }
-        ]
-    )
+            # Create CloudWatch target
+            target_response = cloudwatch_events.put_targets(
+                Rule=rule_name,
+                Targets=[
+                    {
+                        'Id': f'collection_{collection_id}_target',
+                        'Arn': lambda_arn,
+                        'Input': json.dumps({
+                            "shop_id": client.shop_id,
+                            "collection_id": collection_id,
+                            "algo_id": algo_id,
+                            "token": token 
+                        })
+                    }
+                ]
+            )
 
-    print("cloudwatch put target ho rha")
+        print("CloudWatch rules and targets created successfully.")
 
-    return response, target_response
+    except Exception as e:
+        print(f"Error creating CloudWatch rule: {str(e)}")
 
 def generate_custom_cron_expression(start_time, frequency_in_hours):
     print("cron expression bn rahi")

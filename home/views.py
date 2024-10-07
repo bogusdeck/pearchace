@@ -1264,8 +1264,8 @@ def update_global_settings(request):  # working and not tested
                 cron_expression = "cron(0 0 ? * MON *)"
             
             print('schedule_frequency hai data mai')
-            lambda_arn = 'arn:aws:lambda:us-east-1:637423376748:function:scheduleFrequencyHandler'
-            create_cloudwatch_rule(client, cron_expression, lambda_arn) 
+            lambda_arn = 'arn:aws:lambda:ap-south-1:637423376748:function:scheduleFrequencyHandler'
+            create_cloudwatch_rule(client, cron_expression, lambda_arn, token) 
 
 
         if "stock_location" in data:
