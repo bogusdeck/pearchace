@@ -199,12 +199,10 @@ def async_sort_product_order(shop_id, collection_id, algo_id, parameters):
         success = update_collection_products_order(client.shop_url, client.access_token, collection_id, pid)
         
         
-        for product_data in pid:
-            product_id = product_data['id']
-            new_position = product_data['newPosition']
-            ClientProducts.objects.filter(
-                product_id=product_id,collection_id=collection_id
-                ).update(position_in_collection=new_position)
+        for index, product_id in enumerate(pid):
+                ClientProducts.objects.filter(
+                     product_id=product_id, collection_id=collection_id
+                ).update(position_in_collection=index + 1) 
 
         if success:
             print("success in updating product order")
