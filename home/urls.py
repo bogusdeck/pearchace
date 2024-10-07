@@ -34,4 +34,7 @@ urlpatterns = [
     path('api/billing/create/', create_billing_plan, name='create_billing_plan'),
     path('api/billing/confirm/', confirm_billing, name='confirm_billing'),
     path('api/billing/uninstall/', handle_app_uninstall, name='handle_app_uninstall'),   
+
+    # new apis
+     path('api/preview-products/', views.preview_products, name='preview-products'),
 ]

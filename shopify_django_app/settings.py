@@ -122,10 +122,13 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-# # Celery settings
-# CELERY_BROKER_URL = 'redis://redis:6379/0'
-# CELERY_ACCEPT_CONTENT = ['json']
-# CELERY_TASK_SERIALIZER = 'json'
+#celery settings 
+CELERY_BROKER_URL = 'redis://redis:6379/0'
+CELERY_RESULT_BACKEND = 'redis://redis:6379/0'
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = 'UTC'
 
 AUTH_USER_MODEL = 'shopify_app.Client'
 
@@ -196,3 +199,17 @@ SIMPLE_JWT = {
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
 }
+
+
+
+# INSTALLED_APPS += ['storages']
+
+# # AWS S3 Settings
+# AWS_ACCESS_KEY_ID = 'your-access-key-id'
+# AWS_SECRET_ACCESS_KEY = 'your-secret-access-key'
+# AWS_STORAGE_BUCKET_NAME = 'your-s3-bucket-name'
+# AWS_S3_REGION_NAME = 'your-region'  # e.g., 'us-west-2'
+# AWS_S3_SIGNATURE_VERSION = 's3v4'
+
+# # Configure S3 as the default storage for logs
+# DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'

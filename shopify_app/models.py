@@ -136,10 +136,25 @@ class ClientProducts(models.Model):
     total_inventory = models.IntegerField(default=0)
     sales_velocity = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     total_sold_units = models.IntegerField(default=0)
+    position_in_collection = models.IntegerField(default=0)
 
     def __str__(self):
         return f"Product {self.product_name} (ID: {self.product_id}) for shop_id {self.shop_id}"
+    
+#new
+class ClientAlgo(models.Model):
+    shop_id = models.ForeignKey('Client', on_delete=models.CASCADE) 
+    clalgo_id = models.AutoField(primary_key=True)
+    algo_name = models.CharField(max_length=255)
+    number_of_buckets = models.IntegerField()
+    boost_tags = models.JSONField(blank=True, default=list)
+    bury_tags = models.JSONField(blank=True, default=list)
+    bucket_parameters = models.JSONField(blank=True, default=dict)
+    applied_on_collection = models.JSONField(blank=True, default=list)
 
+    def __str__(self):
+        return f"{self.algo_name} - {self.shop_id}"
+    
 #done
 class SortingPlan(models.Model):
     plan_id = models.AutoField(primary_key=True)
@@ -244,5 +259,4 @@ class ClientGraph(models.Model):
 
     def __str__(self):
         return f"Graph for {self.client.shop_id} on {self.date}"
-
 

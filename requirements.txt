@@ -16,3 +16,5 @@ python-dateutil
 pymongo
 celery 
 redis
+boto3
+django-storages
