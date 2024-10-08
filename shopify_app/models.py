@@ -104,6 +104,7 @@ class ClientCollections(models.Model):
     sort_date = models.DateTimeField(null=True, blank=True)
     pinned_products = models.JSONField(blank=True, null=True)
     algo = models.ForeignKey('SortingAlgorithm', on_delete=models.CASCADE, null=True, blank=True)
+    #new field needed which take algo from one place
     parameters_used = models.JSONField(default=dict)
     updated_at = models.DateTimeField(null=True, blank=True)
     out_of_stock_down = models.BooleanField(default=False)
@@ -143,7 +144,7 @@ class ClientProducts(models.Model):
     
 #new
 class ClientAlgo(models.Model):
-    shop_id = models.ForeignKey('Client', on_delete=models.CASCADE) 
+    shop = models.ForeignKey('Client', on_delete=models.CASCADE, to_field='shop_id') 
     clalgo_id = models.AutoField(primary_key=True)
     algo_name = models.CharField(max_length=255)
     number_of_buckets = models.IntegerField()
@@ -154,26 +155,7 @@ class ClientAlgo(models.Model):
 
     def __str__(self):
         return f"{self.algo_name} - {self.shop_id}"
-    
-#done
-class SortingPlan(models.Model):
-    plan_id = models.AutoField(primary_key=True)
-    name = models.CharField(max_length=255)
-    addon_sorts_count = models.IntegerField(null=True, blank=True)
-    addon_sorts_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    created_at = models.DateTimeField(default=timezone.now)
-    updated_at = models.DateTimeField(auto_now=True)
-    cost_month = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    cost_annual = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    sort_limit = models.IntegerField(null=True, blank=True)
-    order_limit = models.IntegerField(null=True, blank=True)
-    shop_id = models.CharField(max_length=255)  
 
-    class Meta:
-        unique_together = ('shop_id', 'plan_id')  
-
-    def __str__(self):
-        return self.name
 
 #done
 class SortingAlgorithm(models.Model):
@@ -193,6 +175,27 @@ def default_parameters_used():
         "percentile": None,
         "variant_threshold": None
     }
+
+
+#done
+class SortingPlan(models.Model):
+    plan_id = models.AutoField(primary_key=True)
+    name = models.CharField(max_length=255)
+    addon_sorts_count = models.IntegerField(null=True, blank=True)
+    addon_sorts_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+    cost_month = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    cost_annual = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    sort_limit = models.IntegerField(null=True, blank=True)
+    order_limit = models.IntegerField(null=True, blank=True)
+    shop_id = models.CharField(max_length=255)  
+
+    class Meta:
+        unique_together = ('shop_id', 'plan_id')  
+
+    def __str__(self):
+        return self.name
 
     
 #done

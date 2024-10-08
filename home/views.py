@@ -21,7 +21,8 @@ from shopify_app.models import (
     SortingAlgorithm,
     ClientCollections,
     ClientProducts,
-    ClientGraph
+    ClientGraph,
+    ClientAlgo
 )
 from shopify_app.api import (
     fetch_collections,
@@ -789,7 +790,7 @@ def fetch_last_sort_date(request):  # working and tested
 @api_view(["GET"]) #  
 @permission_classes([IsAuthenticated])
 @csrf_protect
-def get_products(request):
+def get_products(request, collection_id):
     auth_header = request.headers.get("Authorization", None)
     if auth_header is None:
         return Response(
@@ -812,7 +813,7 @@ def get_products(request):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        collection_id = request.data.get("collection_id")
+        # collection_id = request.data.get("collection_id")
         
         try:
             collection=ClientCollections.objects.filter(
@@ -834,7 +835,7 @@ def get_products(request):
                     "image_link": product.image_link,
                 }
                 for product in client_products
-            ]
+            ] 
 
             return Response({"products": response_products}, status=status.HTTP_200_OK)
         except:
@@ -844,7 +845,6 @@ def get_products(request):
         return Response({"error": "Invalid token"}, status=status.HTTP_401_UNAUTHORIZED)
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
@@ -970,13 +970,188 @@ def preview_products(request):
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-
 ############################### SORTING SETTINGS ###########################################
-@api_view(['GET'])
-@permission_classes([IsAuthenticated]) #working
-def get_quick_config(request):
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def post_quick_config(request):
+    auth_header = request.headers.get("Authorization", None)
+    if auth_header is None:
+        return Response(
+            {'error':'Authorization header missing'},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+    
+    try:
+        token = auth_header.split(" ")[1]
+        jwt_auth = JWTAuthentication()
+        validated_token = jwt_auth.get_validated_token(token)
+        user=jwt_auth.get_user(validated_token)
+
+        shop_id = user.shop_id        
+        if not shop_id:
+            return Response({"error": "Shop ID not found"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        collection_id = request.data.get("collection_id")
+        algo_id = request.data.get("algo_id")
+        parameters = request.data.get("parameters", {})  
+        
+        if not collection_id or not algo_id:
+            return Response(
+                {"error": "Both collection_id and algo_id are required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+
+        if not algo_id:
+            return Response(
+                {"error": "Algorithm ID is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        async_sort_product_order.delay(shop_id, collection_id, algo_id, parameters)
+
+        return Response({"message": "Sorting initiated"}, status=status.HTTP_202_ACCEPTED)
+        
+    except InvalidToken:
+        return Response({"error":"Invalid Token"}, status = status.HTTP_401_UNAUTHORIZED)    
+                    
+    except Exception as e:
+        return Response(
+            {"error": str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def advance_config(request):
     pass
 
+@api_view(["POST"])
+@permission_classes([IsAuthenticated]) # not tested
+def save_client_algorithm(request):
+    auth_header = request.headers.get("Authorization", None)
+    if auth_header is None:
+        return Response(
+            {"error": "Authorization header missing"},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    try:
+        token = auth_header.split(" ")[1]
+        jwt_auth = JWTAuthentication()
+        validated_token = jwt_auth.get_validated_token(token)
+        user = jwt_auth.get_user(validated_token)
+
+        shop_id = user.shop_id
+        if not shop_id:
+            return Response(
+                {"error": "Shop ID not found"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            client = Client.objects.get(shop_id=shop_id)
+        except Client.DoesNotExist:
+            return Response(
+                {"error": "Client not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        algo_name = request.data.get('algo_name')
+        boost_tags = request.data.get('boost_tags', [])
+        bury_tags = request.data.get('bury_tags', [])
+        bucket_parameters = request.data.get('bucket_parameters', [])
+
+        if not algo_name:
+            return Response(
+                {"error": "Algorithm name is required"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        if not isinstance(boost_tags, list):
+            return Response(
+                {"error": "boost_tags must be a list of strings"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        if not isinstance(bury_tags, list):
+            return Response(
+                {"error": "bury_tags must be a list of strings"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        if not isinstance(bucket_parameters, list) or not all(isinstance(bp, dict) for bp in bucket_parameters):
+            return Response(
+                {"error": "bucket_parameters must be a list of dictionaries"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        client_algo = ClientAlgo.objects.create(
+            shop_id=shop_id,
+            algo_name=algo_name,
+            boost_tags=boost_tags,
+            bury_tags=bury_tags,
+            bucket_parameters=bucket_parameters,
+            number_of_buckets=len(bucket_parameters),
+        )
+
+        return Response(
+            {
+                "message": "Algorithm created successfully",
+                "clalgo_id": client_algo.clalgo_id,
+                "algo_name": client_algo.algo_name,
+            },
+            status=status.HTTP_201_CREATED
+        )
+
+    except InvalidToken:
+        return Response({"error": "Invalid token"}, status=status.HTTP_401_UNAUTHORIZED)
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_active_collections(request):
+    auth_header = request.headers.get("Authorization", None)
+    if auth_header is None:
+        return Response(
+            {"error": "Authorization header missing"},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    try:
+        token = auth_header.split(" ")[1]
+        jwt_auth = JWTAuthentication()
+        validated_token = jwt_auth.get_validated_token(token)
+        user = jwt_auth.get_user(validated_token)
+
+        shop_id = user.shop_id
+        if not shop_id:
+            return Response(
+                {"error": "Shop ID not found"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            collections = ClientCollections.objects.filter(
+                    shop_id=shop_id, status=True
+                )
+
+            collection_data = [
+                {
+                    "collection_id": collection.collection_id,
+                    "collection_name": collection.collection_name,
+                }
+                for collection in collections
+            ]
+
+            return Response({"active_collections":collection_data}, status=status.HTTP_200_OK)
+        
+        except ClientCollections.DoesNotExist:
+            return Response(
+                {"error": "client's collection not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+
+    except InvalidToken:
+        return Response({"error": "Invalid token"}, status=status.HTTP_401_UNAUTHORIZED)
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+#def advance config 
 
 ############################## GENERAL SETTINGS FOR COLLECTION ####################################
 @api_view(["POST"])
@@ -1068,7 +1243,7 @@ def update_collection_settings(request):  # working and tested
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def get_sorting_algorithms(request):  #need changes according to new ui
+def get_sorting_algorithms(request):  # Updated for new UI
     auth_header = request.headers.get("Authorization", None)
     if auth_header is None:
         return Response(
@@ -1088,10 +1263,6 @@ def get_sorting_algorithms(request):  #need changes according to new ui
                 {"error": "Shop ID not found"}, status=status.HTTP_400_BAD_REQUEST
             )
 
-        # shop_id = request.GET.get('shop_id')
-        # if not shop_id:
-        #     return Response({'error': 'Client ID is required'}, status=status.HTTP_400_BAD_REQUEST)
-
         try:
             client = Client.objects.get(shop_id=shop_id)
         except Client.DoesNotExist:
@@ -1099,43 +1270,42 @@ def get_sorting_algorithms(request):  #need changes according to new ui
                 {"error": "Client not found"}, status=status.HTTP_404_NOT_FOUND
             )
 
-        default_algo = client.default_algo
-
-        if isinstance(default_algo, SortingAlgorithm):
-            default_algo = {
-                "algo_id": default_algo.algo_id,
-                "name": default_algo.name,
-                "description": default_algo.description,
-            }
-
-        algorithms = SortingAlgorithm.objects.all()
-
-        algo_data = []
-        for algo in algorithms:
-            collections_count = ClientCollections.objects.filter(
-                algo_id=algo.algo_id
-            ).count()
-
-            algo_data.append(
+        primary_algorithms = SortingAlgorithm.objects.all()
+        primary_algo_data = []
+        for algo in primary_algorithms:
+            primary_algo_data.append(
                 {
                     "algo_id": algo.algo_id,
                     "name": algo.name,
                     "description": algo.description,
-                    "default_parameters": algo.default_parameters,
-                    "collections_using_algo": collections_count,
                 }
             )
 
-        return Response(
-            {"default_algo": default_algo, "algorithms": algo_data},
-            status=status.HTTP_200_OK,
-        )
+        client_algorithms = ClientAlgo.objects.filter(shop_id=client)
+        client_algo_data = []
+        for algo in client_algorithms:
+            client_algo_data.append(
+                {
+                    "clalgo_id": algo.clalgo_id,
+                    "algo_name": algo.algo_name,
+                    "number_of_buckets": algo.number_of_buckets,
+                }
+            )
+
+        response_data = {
+            "primary_algorithms": primary_algo_data,
+            "client_algorithms": client_algo_data,
+        }
+
+        return Response(response_data, status=status.HTTP_200_OK)
 
     except InvalidToken:
         return Response({"error": "Invalid token"}, status=status.HTTP_401_UNAUTHORIZED)
 
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
@@ -1215,15 +1385,21 @@ def update_default_algo(request):  # working and tested
 # ███████ ███████    ██       ██    ██ ██   ████  ██████  ███████ 
 #######################################################################################################
 from .boto import create_cloudwatch_rule,generate_custom_cron_expression
+import logging
+
+logger = logging.getLogger('myapp')
+
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated]) #cron needed here and lookback period added according to new ui
-def update_global_settings(request):  # working and not tested
+def update_global_settings(request):  # working and not tested 
     try:
+        logger.info("API hit: update_global_settings")
         data = request.data
 
         auth_header = request.headers.get("Authorization", None)
         if auth_header is None:
+            logger.error("Authorization header missing")
             return Response(
                 {"error": "Authorization header missing"},
                 status=status.HTTP_401_UNAUTHORIZED,
@@ -1236,6 +1412,7 @@ def update_global_settings(request):  # working and not tested
 
         shop_id = user.shop_id
         if not shop_id:
+            logger.error("Shop ID not found in session")
             return Response(
                 {"error": "Shop ID not found in session"},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -1245,6 +1422,7 @@ def update_global_settings(request):  # working and not tested
 
         if "schedule_frequency" in data:
             client.schedule_frequency = data["schedule_frequency"]
+            logger.info(f"Schedule frequency set to: {data['schedule_frequency']}")
             
             if data["schedule_frequency"] == "custom":
                 client.custom_start_time = data.get("custom_start_time")
@@ -1255,6 +1433,7 @@ def update_global_settings(request):  # working and not tested
                     client.custom_start_time, 
                     client.custom_frequency_in_hours
                 )
+                logger.info(f"Custom cron expression generated: {cron_expression}")
 
             elif data["schedule_frequency"] == "hourly":
                 cron_expression = "rate(1 hour)"
@@ -1265,7 +1444,8 @@ def update_global_settings(request):  # working and not tested
             
             print('schedule_frequency hai data mai')
             lambda_arn = 'arn:aws:lambda:ap-south-1:637423376748:function:scheduleFrequencyHandler'
-            create_cloudwatch_rule(client, cron_expression, lambda_arn, token) 
+            create_cloudwatch_rule(client, cron_expression, lambda_arn, token)
+            logger.info("CloudWatch rule creation triggered") 
 
 
         if "stock_location" in data:
@@ -1284,9 +1464,11 @@ def update_global_settings(request):  # working and not tested
         )
 
     except Client.DoesNotExist:
+        logger.error("Client not found")
         return Response({"error": "Client not found"}, status=status.HTTP_404_NOT_FOUND)
 
     except Exception as e:
+        logger.error(f"Exception occurred: {str(e)}")
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(["POST"])

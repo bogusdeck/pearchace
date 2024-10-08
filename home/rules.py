@@ -100,7 +100,6 @@ def variant_availability_ratio(products, days: int = None, high_to_low: bool = T
 def product_tags(products, days: int = None, is_equal_to: bool = True, tags: list = []):
     lookback_date = datetime.now() - timedelta(days=days) if days else None
 
-    # Filter products based on lookback period and check for 'tags' and 'listed_date' fields
     filtered_products = [
         p for p in products
         if isinstance(p, dict) and 'tags' in p and 'listed_date' in p and 'id' in p
@@ -109,15 +108,12 @@ def product_tags(products, days: int = None, is_equal_to: bool = True, tags: lis
         and (lookback_date is None or parser.isoparse(p['listed_date']) >= lookback_date)
     ]
 
-    # Filter by tags: is_equal_to=True means products should match the tags; False means they should NOT match the tags
     if is_equal_to:
-        # Include products that have any of the specified tags
         filtered_by_tags = [
             p for p in filtered_products 
             if any(tag in p['tags'] for tag in tags)
         ]
     else:
-        # Exclude products that have any of the specified tags
         filtered_by_tags = [
             p for p in filtered_products 
             if not any(tag in p['tags'] for tag in tags)
@@ -128,19 +124,17 @@ def product_tags(products, days: int = None, is_equal_to: bool = True, tags: lis
 
 #not done
 def product_inventory(products, days: int = None, comparison_type: int = 0, inventory_threshold: int = 0, capping: int = None):
-    # Ensure the comparison_type is valid; default to 'greater than' if invalid
     comparison_mapping = {
-        0: lambda p: p['inventory'] > inventory_threshold,   # Greater than
-        1: lambda p: p['inventory'] < inventory_threshold,   # Less than
-        2: lambda p: p['inventory'] == inventory_threshold,  # Equal to
-        3: lambda p: p['inventory'] != inventory_threshold   # Not equal to
+        0: lambda p: p['inventory'] > inventory_threshold,   
+        1: lambda p: p['inventory'] < inventory_threshold,   
+        2: lambda p: p['inventory'] == inventory_threshold,  
+        3: lambda p: p['inventory'] != inventory_threshold   
     }
     
     comparison_function = comparison_mapping.get(comparison_type, comparison_mapping[0])
 
     lookback_date = datetime.now() - timedelta(days=days) if days else None
 
-    # Filter products based on the lookback period and inventory
     filtered_products = [
         p for p in products
         if isinstance(p, dict) and 'inventory' in p and 'listed_date' in p and 'id' in p
@@ -149,10 +143,9 @@ def product_inventory(products, days: int = None, comparison_type: int = 0, inve
         and comparison_function(p)
     ]
 
-    # Sort products based on inventory (high to low)
     sorted_products = sorted(filtered_products, key=lambda p: p['inventory'], reverse=True)
 
-    # Apply capping if provided
+    
     if capping is not None:
         sorted_products = sorted_products[:capping]
 

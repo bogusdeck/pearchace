@@ -38,7 +38,7 @@ def create_cloudwatch_rule(client, schedule_expression, lambda_arn,token):
                 ]
             )
 
-        print("CloudWatch rules and targets created successfully.")
+        print("CloudWatch rules and targets created successfully.", target_response)
 
     except Exception as e:
         print(f"Error creating CloudWatch rule: {str(e)}")

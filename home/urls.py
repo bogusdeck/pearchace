@@ -23,9 +23,8 @@ urlpatterns = [
     path('api/update-global-settings/', views.update_global_settings, name='update-global-settings'), # 
     path('api/fetch-sort-date/', views.fetch_last_sort_date, name='fetch-sort-date'),#
     path('api/get-and-update-collections/', views.get_and_update_collections, name='get-and-update-collections'), # 
-    path('api/get-products/', views.get_products, name='get-products'), #
+    path('api/get-products/<str:collection_id>/', views.get_products, name='get-products'), #
     path('api/update-pinned-products/', views.update_pinned_products, name='update-pinned-products'), # 
-    path('api/get-sorting-algorithms/', views.get_sorting_algorithms, name='get-sorting-algorithms'), # 
     path('api/update-default-algo/', views.update_default_algo, name='update-default-algo'), # 
 
     # # Billing urls 
@@ -36,5 +35,10 @@ urlpatterns = [
     path('api/billing/uninstall/', handle_app_uninstall, name='handle_app_uninstall'),   
 
     # new apis
-     path('api/preview-products/', views.preview_products, name='preview-products'),
+    path('api/preview-products/', views.preview_products, name='preview-products'),
+    path('api/post-quick-config/', views.post_quick_config, name='post-quick-config'),
+    path('api/get-sorting-algorithms/', views.get_sorting_algorithms, name='get-sorting-algorithms'), 
+    path('api/save-client-algorithm/', views.save_client_algorithm, name='save-client-algorithm'),
+    path('api/get-active-collections/', views.get_active_collections, name="get-active-collections"),
+    
 ]
