@@ -25,7 +25,8 @@ INSTALLED_APPS = [
     'home.apps.HomeConfig',
     'rest_framework',
     'rest_framework_simplejwt',
-    'corsheaders'
+    'corsheaders',
+    'django_celery_beat',
 ]
 
 MIDDLEWARE = [
@@ -130,6 +131,8 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'UTC'
 
+CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers.DatabaseScheduler'
+
 AUTH_USER_MODEL = 'shopify_app.Client'
 
 LANGUAGE_CODE = 'en-us'
@@ -194,7 +197,7 @@ REST_FRAMEWORK = {
 from datetime import timedelta
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(days=7),  
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=28),  
     'REFRESH_TOKEN_LIFETIME': timedelta(days=28),  
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
@@ -202,14 +205,41 @@ SIMPLE_JWT = {
 
 
 
-# INSTALLED_APPS += ['storages']
-
-# # AWS S3 Settings
-# AWS_ACCESS_KEY_ID = 'your-access-key-id'
-# AWS_SECRET_ACCESS_KEY = 'your-secret-access-key'
-# AWS_STORAGE_BUCKET_NAME = 'your-s3-bucket-name'
-# AWS_S3_REGION_NAME = 'your-region'  # e.g., 'us-west-2'
-# AWS_S3_SIGNATURE_VERSION = 's3v4'
-
-# # Configure S3 as the default storage for logs
-# DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
+# LOGGING = {
+#     'version': 1,
+#     'disable_existing_loggers': False,
+#     'formatters': {
+#         'verbose': {
+#             'format': '{levelname} {asctime} {module} {message}',
+#             'style': '{',
+#         },
+#         'simple': {
+#             'format': '{levelname} {message}',
+#             'style': '{',
+#         },
+#     },
+#     'handlers': {
+#         'file': {
+#             'level': 'DEBUG',
+#             'class': 'logging.FileHandler',
+#             'filename': os.path.join(BASE_DIR, 'django_debug.log'),  
+#             'formatter': 'verbose',
+#         },
+#         'console': {
+#             'class': 'logging.StreamHandler',
+#             'formatter': 'simple',
+#         },
+#     },
+#     'loggers': {
+#         'django': {
+#             'handlers': ['file', 'console'],
+#             'level': 'DEBUG',
+#             'propagate': True,
+#         },
+#         'myapp': {  # You can customize this for your app
+#             'handlers': ['file', 'console'],
+#             'level': 'DEBUG',
+#             'propagate': True,
+#         },
+#     },
+# }
