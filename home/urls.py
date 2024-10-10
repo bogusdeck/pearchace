@@ -40,5 +40,9 @@ urlpatterns = [
     path('api/get-sorting-algorithms/', views.get_sorting_algorithms, name='get-sorting-algorithms'), 
     path('api/save-client-algorithm/', views.save_client_algorithm, name='save-client-algorithm'),
     path('api/get-active-collections/', views.get_active_collections, name="get-active-collections"),
-    
+    path('api/search-products/<str:collection_id>/', views.search_products, name='search-collections'),
+    path('api/update-all-algo/<int:clalgo_id>/', views.update_all_algo, name='update-all-algo'),
+    path('api/applied-on-active-collection/', views.applied_on_active_collection, name='applied-on-active-collection'),
+    path('api/sorting-rule/<int:clalgo_id>/', views.sorting_rule, name='sorting-rule'),
+    path('api/advance-config/', views.advance_config, name='advance-config'),
 ]

@@ -25,7 +25,8 @@ INSTALLED_APPS = [
     'home.apps.HomeConfig',
     'rest_framework',
     'rest_framework_simplejwt',
-    'corsheaders'
+    'corsheaders',
+    'django_celery_beat',
 ]
 
 MIDDLEWARE = [
@@ -129,6 +130,8 @@ CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'UTC'
+
+CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers.DatabaseScheduler'
 
 AUTH_USER_MODEL = 'shopify_app.Client'
 

@@ -208,3 +208,49 @@ def segregate_pinned_products(pinned_products):
 
 
 
+
+# primary strategies
+
+# def promote_new(products, days=7, capping=None):
+#     return new_products(products, days=days, date_type=0, capping=capping)
+
+# def promote_high_revenue(products, days=7, percentile=5, capping=None):
+#     # Sort by revenue and filter products within the top 5 percentile
+#     sorted_products = revenue_generated(products, days=days, high_to_low=True)
+#     top_percentile_index = int(len(sorted_products) * (percentile / 100))
+#     return sorted_products[:top_percentile_index] if capping is None else sorted_products[:top_percentile_index][:capping]
+
+# def promote_high_inventory(products, days=None, percentile=10, capping=None):
+#     # Sort by sales velocity and filter bottom 10%
+#     sorted_products = Number_of_sales(products, days=days, high_to_low=False)
+#     bottom_percentile_index = int(len(sorted_products) * (percentile / 100))
+#     return sorted_products[:bottom_percentile_index] if capping is None else sorted_products[:bottom_percentile_index][:capping]
+
+# def bestsellers_high_variant_availability(products, days=None, revenue_percentile=20, variant_availability_threshold=60, capping=None):
+#     # Filter for high variant availability
+#     filtered_by_variant = variant_availability_ratio(products, high_to_low=True)
+#     # Further filter by revenue percentile
+#     filtered_by_revenue = revenue_generated(filtered_by_variant, days=days, high_to_low=True)
+#     top_revenue_index = int(len(filtered_by_revenue) * (revenue_percentile / 100))
+#     filtered_products = [p for p in filtered_by_revenue[:top_revenue_index] if p['variant_availability'] > variant_availability_threshold]
+#     return filtered_products[:capping] if capping else filtered_products
+
+# def promote_high_variant_availability(products, variant_availability_threshold=60, capping=None):
+#     # Filter for high variant availability
+#     return variant_availability_ratio(products, high_to_low=True, capping=capping)
+
+# def clearance_sale(products, days=90, percentile=10, capping=None):
+#     # Filter for bottom 10% sales velocity and listed date > 90 days
+#     low_sales_velocity = Number_of_sales(products, days=None, high_to_low=False)
+#     bottom_sales_index = int(len(low_sales_velocity) * (percentile / 100))
+#     filtered_by_sales_velocity = low_sales_velocity[:bottom_sales_index]
+#     clearance_products = [p for p in filtered_by_sales_velocity if parser.isoparse(p['listed_date']) <= datetime.now() - timedelta(days=days)]
+#     return clearance_products[:capping] if capping else clearance_products
+
+# def promote_high_revenue_new(products, days=90, revenue_percentile=20, capping=None):
+#     # Filter new products first
+#     new_products_list = new_products(products, days=days, date_type=0)
+#     # Filter by revenue
+#     filtered_by_revenue = revenue_generated(new_products_list, high_to_low=True)
+#     top_revenue_index = int(len(filtered_by_revenue) * (revenue_percentile / 100))
+#     return filtered_by_revenue[:top_revenue_index] if capping is None else filtered_by_revenue[:top_revenue_index][:capping]

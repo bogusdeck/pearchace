@@ -103,16 +103,15 @@ class ClientCollections(models.Model):
     products_count = models.IntegerField(default=0)
     sort_date = models.DateTimeField(null=True, blank=True)
     pinned_products = models.JSONField(blank=True, null=True)
-    algo = models.ForeignKey('SortingAlgorithm', on_delete=models.CASCADE, null=True, blank=True)
-    #new field needed which take algo from one place
+    algo = models.ForeignKey('ClientAlgo', on_delete=models.CASCADE, null=True, blank=True)  
     parameters_used = models.JSONField(default=dict)
     updated_at = models.DateTimeField(null=True, blank=True)
     out_of_stock_down = models.BooleanField(default=False)
     pinned_out_of_stock_down = models.BooleanField(default=False)
     new_out_of_stock_down = models.BooleanField(default=False)
     refetch = models.BooleanField(default=True)
-    collection_total_revenue = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)  
-    
+    collection_total_revenue = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
+
     class Meta:
         unique_together = ('shop_id', 'collection_id')
 
@@ -144,14 +143,14 @@ class ClientProducts(models.Model):
     
 #new
 class ClientAlgo(models.Model):
-    shop = models.ForeignKey('Client', on_delete=models.CASCADE, to_field='shop_id') 
+    shop = models.ForeignKey('Client', on_delete=models.CASCADE, to_field='shop_id', null=True, blank=True)  
     clalgo_id = models.AutoField(primary_key=True)
     algo_name = models.CharField(max_length=255)
     number_of_buckets = models.IntegerField()
     boost_tags = models.JSONField(blank=True, default=list)
     bury_tags = models.JSONField(blank=True, default=list)
     bucket_parameters = models.JSONField(blank=True, default=dict)
-    applied_on_collection = models.JSONField(blank=True, default=list)
+    is_primary = models.BooleanField(default=False)
 
     def __str__(self):
         return f"{self.algo_name} - {self.shop_id}"
