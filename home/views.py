@@ -8,18 +8,18 @@ from rest_framework.exceptions import NotFound
 from django.shortcuts import redirect
 from shopify_app.decorators import shop_login_required
 from django.http import JsonResponse
-from datetime import datetime
+from datetime import datetime, timedelta
 from django.utils import timezone
 import pytz
 from django.views.decorators.http import require_GET
 import shopify
 from django.views.decorators.csrf import csrf_protect
+from django.core.exceptions import ObjectDoesNotExist
 from shopify_app.models import (
     Client,
     Usage,
     Subscription,
     SortingPlan,
-    SortingAlgorithm,
     ClientCollections,
     ClientProducts,
     ClientGraph,
@@ -53,8 +53,8 @@ ALGO_ID_TO_FUNCTION = {
 }
 
 from shopify_app.tasks import (
-    async_quick_sort_product_order,
-    async_advance_sort_product_order,
+    async_cron_sort_product_order,
+    async_sort_product_order,
     async_fetch_and_store_collections,
     async_fetch_and_store_products,
 )
@@ -185,11 +185,11 @@ def get_client_info(request):
              "client_id": user.shop_id,
              "shop_url":user.shop_url,
              "shop_name":user.shop_name,
+             "subscription_status":user.member,
              "message": "Collection fetch initiated."},
             status=status.HTTP_200_OK,
         )
 
-        
 
     except InvalidToken:
         return Response({"error": "Invalid token"}, status=status.HTTP_401_UNAUTHORIZED)
@@ -266,21 +266,139 @@ def available_sorts(request):
             {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
-
-@api_view(['GET']) # graph data will be displayed for the user
+@api_view(['GET'])
+@permission_classes([IsAuthenticated]) 
 def get_graph(request):
-    date = request.GET.get('date')
-    # revenue_data, top_products_by_revenue, top_products_by_sold_units = calculate_total_revenue(date)
+    auth_header = request.headers.get("Authorization", None)
+    if auth_header is None:
+        return JsonResponse(
+            {"error": "Authorization header missing"},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
 
-    # response_data = {
-    #     'date': date,
-    #     'total_revenue': revenue_data['total_revenue'],
-    #     'top_products_by_revenue': top_products_by_revenue,
-    #     'top_products_by_sold_units': top_products_by_sold_units,
-    # }
-    response_data = "hi hi hi graph nhi hai bhai cron mai lgaunga"
-    return Response(response_data)
+    try:
+        token = auth_header.split(" ")[1]
 
+        jwt_auth = JWTAuthentication()
+
+        validated_token = jwt_auth.get_validated_token(token)
+        user = jwt_auth.get_user(validated_token)
+
+        shop_url = user.shop_url
+
+        if not shop_url:
+            return JsonResponse(
+                {"error": "Shop URL not found in token"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        
+        shop_id = user.shop_id  
+
+        start_date_str = request.GET.get('start_date')
+        end_date_str = request.GET.get('end_date')
+
+        try:
+            start_date = datetime.strptime(start_date_str, "%d/%m/%Y").date()
+            end_date = datetime.strptime(end_date_str, "%d/%m/%Y").date()
+
+            if start_date > end_date:
+                return Response({"error": "Start date must be earlier than end date."}, status=status.HTTP_400_BAD_REQUEST)
+
+            delta = end_date - start_date
+            date_list = [start_date + timedelta(days=i) for i in range(delta.days + 1)]
+
+            revenue_data = {date: 0 for date in date_list}
+
+            revenue_entries = ClientGraph.objects.filter(shop_id=shop_id, date__range=[start_date, end_date])
+
+            for entry in revenue_entries:
+                revenue_data[entry.date] = entry.revenue
+
+            response_data = {date.strftime("%d/%m/%Y"): revenue_data[date] for date in date_list}
+
+            # top 5 products globally on the basis of REVENUE
+            top_products_by_revenue = ClientProducts.objects.filter(shop_id=shop_id)\
+                .order_by('-total_revenue')[:5] 
+            
+            top_products_revenue_data = [
+                {
+                    'product_id': product.product_id,
+                    'product_name': product.product_name,
+                    'total_revenue': product.total_revenue,
+                }
+                for product in top_products_by_revenue
+            ]
+
+            # top 5 products globally on the basis of SALES
+            top_products_by_sales = ClientProducts.objects.filter(shop_id=shop_id)\
+                .order_by('-total_sold_units')[:5]  
+            
+            top_products_sales_data = [
+                {
+                    'product_id': product.product_id,
+                    'product_name': product.product_name,
+                    'total_sold_units': product.total_sold_units,
+                }
+                for product in top_products_by_sales
+            ]
+            
+            # top 5 collections globally on the basis of REVENUE
+            top_collections_by_revenue = ClientCollections.objects.filter(shop_id=shop_id)\
+                .order_by('-collection_total_revenue')[:5]  
+            
+            top_collections_revenue_data = [
+                {
+                    'collection_id': collection.collection_id,
+                    'collection_name': collection.collection_name,
+                    'collection_total_revenue': collection.collection_total_revenue,
+                }
+                for collection in top_collections_by_revenue
+            ]
+            
+            
+            # top 5 collections globally on the basis of SALES
+            top_collections_by_sales = ClientCollections.objects.filter(shop_id=shop_id)\
+                .order_by('-collection_sold_units')[:5]  
+            
+            top_collections_sales_data = [
+                {
+                    'collection_id': collection.collection_id,
+                    'collection_name': collection.collection_name,
+                    'collection_sold_units': collection.collection_sold_units,
+                }
+                for collection in top_collections_by_sales
+            ]
+
+        
+            response_data.update({
+                'top_products_by_revenue': top_products_revenue_data,
+                'top_products_by_sales': top_products_sales_data,
+                'top_collections_by_revenue': top_collections_revenue_data,
+                'top_collections_by_sales': top_collections_sales_data,
+            })
+
+            
+            print(response_data)
+
+            return Response(response_data)
+
+        except ValueError:
+            return Response({"error": "Invalid date format. Please use DD/MM/YYYY."}, status=status.HTTP_400_BAD_REQUEST)
+        except ClientGraph.DoesNotExist:
+            return JsonResponse(
+                {"error": "Usage record not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+        
+    except InvalidToken:
+        return JsonResponse(
+            {"error": "Invalid token"}, status=status.HTTP_401_UNAUTHORIZED
+        )
+    except Exception as e:
+        return JsonResponse(
+            {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+    
 @api_view(["GET"]) # client's last active collections which are sorted by us 
 @permission_classes([IsAuthenticated])
 def last_active_collections(request):  # working and tested
@@ -302,6 +420,8 @@ def last_active_collections(request):  # working and tested
         shop_url = user.shop_url
         shop_id = user.shop_id
 
+        print(shop_url, shop_id)
+
         if not shop_url:
             return Response(
                 {"error": "Shop URL not found "}, status=status.HTTP_400_BAD_REQUEST
@@ -309,15 +429,19 @@ def last_active_collections(request):  # working and tested
 
         try:
             client = Client.objects.get(shop_url=shop_url)
+            print(client)
 
             collections = ClientCollections.objects.filter(
                 shop_id=shop_id, status=True
             ).order_by("-sort_date")[:5]
 
+            print("collections", collections)
+
             collections_data = []
             for collection in collections:
-                algo_name = SortingAlgorithm.objects.get(id=collection.algo.id).name
-
+                print("collection loop", collection.collection_id)
+                algo_name = ClientAlgo.objects.get(algo_id=collection.algo.id).algo_name
+                print(algo_name)
                 collections_data.append(
                     {
                         "collection_id": collection.collection_id,
@@ -328,9 +452,13 @@ def last_active_collections(request):  # working and tested
                     }
                 )
 
-            return Response(
-                {"collections": collections_data}, status=status.HTTP_200_OK
-            )
+
+            if collections_data:
+                response_data = {"collections": collections_data}
+            else:
+                response_data = {"message": "No sort data found"}
+
+            return Response(response_data, status=status.HTTP_200_OK)
 
         except Client.DoesNotExist:
             return Response(
@@ -342,7 +470,7 @@ def last_active_collections(request):  # working and tested
                 {"error": "No collections found"}, status=status.HTTP_404_NOT_FOUND
             )
 
-        except SortingAlgorithm.DoesNotExist:
+        except ClientAlgo.DoesNotExist:
             return Response(
                 {"error": "Sorting algorithm not found"},
                 status=status.HTTP_404_NOT_FOUND,
@@ -411,7 +539,7 @@ def get_last_sorted_time(request, client_id):  # working not tested
             if latest_usage:
                 response_data = {"last_sorted_time": latest_usage.updated_at}
             else:
-                response_data = {"error": "No usage data found for this client"}
+                response_data = {"message": "No usage data found for this client"}
 
             return Response(response_data, status=status.HTTP_200_OK)
 
@@ -429,7 +557,7 @@ def get_last_sorted_time(request, client_id):  # working not tested
         return Response({"error": "Invalid token"}, status=status.HTTP_401_UNAUTHORIZED)
 
     except Exception as e:
-        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({"errore": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class ClientCollectionsPagination(PageNumberPagination):
     page_size = 10
@@ -483,8 +611,8 @@ def get_client_collections(request, client_id):  # working and tested
             collections_data = []
             for collection in paginated_collections:
                 algo_id = ClientAlgo.objects.get(
-                    clalgo_id=collection.algo_id
-                ).clalgo_id
+                    algo_id=collection.algo_id
+                ).algo_id
 
                 collections_data.append(
                     {
@@ -501,7 +629,7 @@ def get_client_collections(request, client_id):  # working and tested
             return Response(
                 {"error": "Client not found"}, status=status.HTTP_404_NOT_FOUND
             )
-        except SortingAlgorithm.DoesNotExist:
+        except ClientAlgo.DoesNotExist:
             return Response(
                 {"error": "Sorting algorithm not found"},
                 status=status.HTTP_404_NOT_FOUND,
@@ -610,10 +738,10 @@ def update_collection(request, collection_id):  # working not tested
 
         if algo_id is not None:
             try:
-                algo = SortingAlgorithm.objects.get(algo_id=algo_id)
+                algo = ClientAlgo.objects.get(algo_id=algo_id)
                 collection.algo = algo
                 updated = True
-            except SortingAlgorithm.DoesNotExist:
+            except ClientAlgo.DoesNotExist:
                 return Response(
                             {"error": "Algorithm not found"}, status=status.HTTP_404_NOT_FOUND
                 )
@@ -713,7 +841,7 @@ def update_product_order(request):
             "variant_threshold":parameters_used.get("variant_threshold", 5.0),
         }
 
-        async_quick_sort_product_order.delay(shop_id, collection_id, algo_id, parameters)
+        async_cron_sort_product_order.delay(shop_id, collection_id, algo_id, parameters)
 
         return Response({"message": "Sorting initiated"}, status=status.HTTP_202_ACCEPTED)
 
@@ -725,7 +853,7 @@ def update_product_order(request):
 
 
 
-########## COLLECTION SETTING ############
+################################  COLLECTION SETTING #######################################
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated]) # last sort date for that collection
@@ -772,6 +900,7 @@ def fetch_last_sort_date(request):  # working and tested
         return Response(
             {
                 "collection_id": collection.collection_id,
+                "collection_name":collection.collection_name,
                 "sort_date": sort_date,
             },
             status=status.HTTP_200_OK,
@@ -815,8 +944,6 @@ def get_products(request, collection_id):
                 {"error": "Shop ID not found in session"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
-        # collection_id = request.data.get("collection_id")
         
         try:
             collection=ClientCollections.objects.filter(
@@ -828,21 +955,39 @@ def get_products(request, collection_id):
                     {"error":"Collection not found"}, status=status.HTTP_404_NOT_FOUND
                 )
             
+            if isinstance(collection.pinned_products, str):
+                pinned_product_ids = json.loads(collection.pinned_products)
+            else:
+                pinned_product_ids = collection.pinned_products
+            
             client_products = ClientProducts.objects.filter(collection_id=collection_id)
 
-            response_products = [
-                {
-                    "id": product.product_id,
-                    "title": product.product_name,
-                    "total_inventory":product.total_inventory,
-                    "image_link": product.image_link,
-                }
-                for product in client_products
-            ] 
+            pinned_products = []
+            non_pinned_products = []
 
-            return Response({"products": response_products}, status=status.HTTP_200_OK)
-        except:
-            return Response()
+            for product in client_products:
+                product_data = {
+                    "id" : product.product_id,
+                    "title" : product.product_name,
+                    "total_inventory" : product.total_inventory,
+                    "image_link" : product.image_link,
+                }
+                
+                print(product.product_id, pinned_product_ids)
+
+                if str(product.product_id) in map(str, pinned_product_ids):
+                    pinned_products.append(product_data)
+                else:
+                    non_pinned_products.append(product_data)
+
+
+            return Response({
+                "pinned_products": pinned_products,
+                "products":non_pinned_products 
+            }, status=status.HTTP_200_OK)
+            
+        except ObjectDoesNotExist:
+            return Response({"error": "Collection not found"}, status=status.HTTP_404_NOT_FOUND)
         
     except InvalidToken:
         return Response({"error": "Invalid token"}, status=status.HTTP_401_UNAUTHORIZED)
@@ -974,6 +1119,7 @@ def search_products(request, collection_id):  #
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated]) #done and tested
 def preview_products(request):
@@ -1071,7 +1217,7 @@ def post_quick_config(request):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        async_quick_sort_product_order.delay(shop_id, collection_id, algo_id)
+        async_cron_sort_product_order.delay(shop_id, collection_id, algo_id)
 
         return Response({"message": "Sorting initiated"}, status=status.HTTP_202_ACCEPTED)
         
@@ -1105,16 +1251,16 @@ def advance_config(request):
             return Response({"error": "Shop ID not found"}, status=status.HTTP_400_BAD_REQUEST)
         
         collection_id = request.data.get("collection_id")
-        clalgo_id = request.data.get("clalgo_id")
+        algo_id = request.data.get("algo_id")
         
-        if not collection_id or not clalgo_id:
+        if not collection_id or not algo_id:
             return Response(
-                {"error": "Both collection_id and clalgo_id are required"},
+                {"error": "Both collection_id and algo_id are required"},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
         try:
-            client_algo = ClientAlgo.objects.get(clalgo_id=clalgo_id, shop_id=shop_id)
+            client_algo = ClientAlgo.objects.get(algo_id=algo_id)
         except ClientAlgo.DoesNotExist:
             return Response({"error": "Algorithm not found for this shop"}, status=status.HTTP_404_NOT_FOUND)
 
@@ -1122,7 +1268,7 @@ def advance_config(request):
         if not bucket_parameters:
             return Response({"error": "Bucket parameters not found"}, status=status.HTTP_400_BAD_REQUEST)
 
-        task = async_advance_sort_product_order.delay(shop_id, collection_id, clalgo_id)
+        task = async_sort_product_order.delay(shop_id, collection_id, algo_id)
 
         return Response(
             {"message": "Sorting initiated with advanced system", "task_id": task.id},
@@ -1202,7 +1348,7 @@ def save_client_algorithm(request):
         return Response(
             {
                 "message": "Algorithm created successfully",
-                "clalgo_id": client_algo.clalgo_id,
+                "algo_id": client_algo.algo_id,
                 "algo_name": client_algo.algo_name,
             },
             status=status.HTTP_201_CREATED
@@ -1216,7 +1362,7 @@ def save_client_algorithm(request):
 
 @api_view(['PUT'])
 @permission_classes([IsAuthenticated])
-def update_all_algo(request, clalgo_id):
+def update_all_algo(request, algo_id):
     auth_header = request.headers.get("Authorization", None)
     if auth_header is None:
         return Response(
@@ -1230,7 +1376,7 @@ def update_all_algo(request, clalgo_id):
         user = jwt_auth.get_user(validated_token)
 
         try:
-            client_algo = ClientAlgo.objects.get(clalgo_id=clalgo_id, shop=user.shop_id)
+            client_algo = ClientAlgo.objects.get(algo_id=algo_id, shop=user.shop_id)
         except ClientAlgo.DoesNotExist:
             raise NotFound("Algorithm not found for this client.")
 
@@ -1329,12 +1475,12 @@ def applied_on_active_collection(request):
 
         data = request.data
         collection_ids = data.get("collection_ids", [])
-        clalgo_id = data.get("clalgo_id")
+        algo_id = data.get("algo_id")
 
-        if not collection_ids or not clalgo_id:
-            return Response({"error": "collection_ids and clalgo_id are required."}, status=status.HTTP_400_BAD_REQUEST)
+        if not collection_ids or not algo_id:
+            return Response({"error": "collection_ids and algo_id are required."}, status=status.HTTP_400_BAD_REQUEST)
 
-        ClientCollections.objects.filter(shop_id=shop_id, collection_id__in=collection_ids).update(algo=clalgo_id)
+        ClientCollections.objects.filter(shop_id=shop_id, collection_id__in=collection_ids).update(algo=algo_id)
 
         return Response({"message": "Updated successfully."}, status=status.HTTP_200_OK)
 
@@ -1403,7 +1549,6 @@ def update_collection_settings(request):  # working and tested
                 "out_of_stock_down": collection.out_of_stock_down,
                 "pinned_out_of_stock_down": collection.pinned_out_of_stock_down,
                 "new_out_of_stock_down": collection.new_out_of_stock_down,
-                "lookback_periods": collection.lookback_periods,
             },
             status=status.HTTP_200_OK,
         )
@@ -1421,7 +1566,54 @@ def update_collection_settings(request):  # working and tested
 
 
 ############################ ANALYTICS TABS FOR COLLECTION ########################################
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_collection_analytics(request, collection_id):
+    try:
+        collection = ClientCollections.objects.filter(collection_id=collection_id).first()
 
+        if not collection:
+            return JsonResponse({"error": "Collection not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        # Fetch top 5 products by total revenue
+        top_products_by_revenue = ClientProducts.objects.filter(collection_id=collection_id).order_by('-total_revenue')[:5]
+
+        # Fetch top 5 products by total sold units
+        top_products_by_sold_units = ClientProducts.objects.filter(collection_id=collection_id).order_by('-total_sold_units')[:5]
+
+        # Prepare response data for products by revenue
+        top_revenue_data = [
+            {
+                "product_id": product.product_id,
+                "product_name": product.product_name,
+                "total_revenue": product.total_revenue,
+            }
+            for product in top_products_by_revenue
+        ]
+
+        # Prepare response data for products by sold units
+        top_sold_units_data = [
+            {
+                "product_id": product.product_id,
+                "product_name": product.product_name,
+                "total_sold_units": product.total_sold_units,
+            }
+            for product in top_products_by_sold_units
+        ]
+
+        # Final response structure
+        response_data = {
+            "collection_id": collection.collection_id,
+            "collection_name": collection.collection_name,
+            "top_products_by_revenue": top_revenue_data,
+            "top_products_by_sold_units": top_sold_units_data,
+        }
+
+        return Response(response_data, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
 
 ########################################################################################################
 # ███████  ██████  ██████  ████████ ██ ███    ██  ██████      ██████  ██    ██ ██      ███████ ███████ 
@@ -1460,7 +1652,7 @@ def get_sorting_algorithms(request):  # Updated for new UI
                 {"error": "Client not found"}, status=status.HTTP_404_NOT_FOUND
             )
 
-        primary_algorithms = SortingAlgorithm.objects.all()
+        primary_algorithms = ClientAlgo.objects.all()
         primary_algo_data = []
         for algo in primary_algorithms:
             primary_algo_data.append(
@@ -1476,7 +1668,7 @@ def get_sorting_algorithms(request):  # Updated for new UI
         for algo in client_algorithms:
             client_algo_data.append(
                 {
-                    "clalgo_id": algo.clalgo_id,
+                    "algo_id": algo.algo_id,
                     "algo_name": algo.algo_name,
                     "number_of_buckets": algo.number_of_buckets,
                 }
@@ -1534,8 +1726,8 @@ def update_default_algo(request):  # working and tested
             )
 
         try:
-            algo = SortingAlgorithm.objects.get(algo_id=algo_id)
-        except SortingAlgorithm.DoesNotExist:
+            algo = ClientAlgo.objects.get(algo_id=algo_id)
+        except ClientAlgo.DoesNotExist:
             return Response(
                 {"error": "Sorting algorithm not found"},
                 status=status.HTTP_404_NOT_FOUND,
@@ -1561,7 +1753,7 @@ def update_default_algo(request):  # working and tested
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated]) # done and tested
-def sorting_rule(request, clalgo_id):
+def sorting_rule(request, algo_id):
     auth_header = request.headers.get("Authorization", None)
     if auth_header is None:
         return Response(
@@ -1583,10 +1775,10 @@ def sorting_rule(request, clalgo_id):
             )
 
         try:
-            client_algo = ClientAlgo.objects.get(clalgo_id=clalgo_id, shop_id=shop_id)
+            client_algo = ClientAlgo.objects.get(algo_id=algo_id, shop_id=shop_id)
 
             algo_data = {
-                "clalgo_id": client_algo.clalgo_id,
+                "algo_id": client_algo.algo_id,
                 "algo_name": client_algo.algo_name,
                 "number_of_buckets": client_algo.number_of_buckets,
                 "boost_tags": client_algo.boost_tags,
@@ -1625,10 +1817,11 @@ logger = logging.getLogger('myapp')
 
 from django_celery_beat.models import PeriodicTask, CrontabSchedule, IntervalSchedule
 import json
+from shopify_app.tasks import sort_active_collections
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated]) 
-def update_global_settings(request):  # working and not tested 
+def update_global_settings(request):
     try:
         logger.info("API hit: update_global_settings")
         data = request.data
@@ -1636,10 +1829,7 @@ def update_global_settings(request):  # working and not tested
         auth_header = request.headers.get("Authorization", None)
         if auth_header is None:
             logger.error("Authorization header missing")
-            return Response(
-                {"error": "Authorization header missing"},
-                status=status.HTTP_401_UNAUTHORIZED,
-            )
+            return Response({"error": "Authorization header missing"}, status=status.HTTP_401_UNAUTHORIZED)
 
         token = auth_header.split(" ")[1]
         jwt_auth = JWTAuthentication()
@@ -1649,97 +1839,91 @@ def update_global_settings(request):  # working and not tested
         shop_id = user.shop_id
         if not shop_id:
             logger.error("Shop ID not found in session")
-            return Response(
-                {"error": "Shop ID not found in session"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return Response({"error": "Shop ID not found in session"}, status=status.HTTP_400_BAD_REQUEST)
 
         client = Client.objects.get(shop_id=shop_id)
 
         if "schedule_frequency" in data:
-            PeriodicTask.objects.filter(name=f"sort_collections_{client.shop_id}").delete()
+            # Clear existing schedule tasks for this client
+            PeriodicTask.objects.filter(name__startswith=f"sort_collections_{client.shop_id}").delete()
 
             client.schedule_frequency = data["schedule_frequency"]
             logger.info(f"Schedule frequency set to: {data['schedule_frequency']}")
-            
+
+            # Handle schedule based on frequency
             if data["schedule_frequency"] == "hourly":
-                interval_schedule, _ = IntervalSchedule.objects.get_or_create(
-                    every=1,
-                    period=IntervalSchedule.HOURS
-                )
+                interval_schedule, _ = IntervalSchedule.objects.get_or_create(every=1, period=IntervalSchedule.HOURS)
                 PeriodicTask.objects.create(
                     interval=interval_schedule,  
-                    name=f"sort_collections_{client.shop_id}",
-                    task="your_app.tasks.sort_active_collections",
+                    name=f"sort_collections_{client.shop_id}_hourly",
+                    task="shopify_app.tasks.sort_active_collections",
                     args=json.dumps([client.id])
                 )
-            
+
             elif data["schedule_frequency"] == "daily":
-                crontab_schedule, _ = CrontabSchedule.objects.get_or_create(
-                    minute=0,
-                    hour=0,  
-                )
+                crontab_schedule, _ = CrontabSchedule.objects.get_or_create(minute=0, hour=0)  # Midnight
                 PeriodicTask.objects.create(
                     crontab=crontab_schedule,  
-                    name=f"sort_collections_{client.shop_id}",
-                    task="your_app.tasks.sort_active_collections",
+                    name=f"sort_collections_{client.shop_id}_daily",
+                    task="shopify_app.tasks.sort_active_collections",
                     args=json.dumps([client.id])
                 )
-            
+
             elif data["schedule_frequency"] == "weekly":
-                crontab_schedule, _ = CrontabSchedule.objects.get_or_create(
-                    minute=0,
-                    hour=0,
-                    day_of_week="1",  
-                )
+                crontab_schedule, _ = CrontabSchedule.objects.get_or_create(minute=0, hour=0, day_of_week="1")  # Monday
                 PeriodicTask.objects.create(
                     crontab=crontab_schedule, 
-                    name=f"sort_collections_{client.shop_id}",
-                    task="your_app.tasks.sort_active_collections",
+                    name=f"sort_collections_{client.shop_id}_weekly",
+                    task="shopify_app.tasks.sort_active_collections",
                     args=json.dumps([client.id])
                 )
-            
+
             elif data["schedule_frequency"] == "custom":
                 start_time = data.get("custom_start_time")
                 stop_time = data.get("custom_stop_time")
                 frequency_in_hours = data.get("custom_frequency_in_hours")
+                
+                client.custom_start_time = start_time
+                client.custom_stop_time = stop_time
+                client.custom_frequency_in_hours = frequency_in_hours
+                
 
                 if start_time and stop_time and frequency_in_hours:
                     start_hour, start_minute = map(int, start_time.split(':'))
                     stop_hour, stop_minute = map(int, stop_time.split(':'))
 
+                    if start_hour >= stop_hour:
+                        return Response({"error": "Start time must be before stop time"}, status=status.HTTP_400_BAD_REQUEST)
+
                     current_hour = start_hour
                     while current_hour < stop_hour:
-                        crontab_schedule, _ = CrontabSchedule.objects.get_or_create(
-                            minute=start_minute,
-                            hour=current_hour,
-                        )
+                        crontab_schedule, _ = CrontabSchedule.objects.get_or_create(minute=start_minute, hour=current_hour)
                         PeriodicTask.objects.create(
                             crontab=crontab_schedule,
                             name=f"sort_collections_{client.shop_id}_custom_{current_hour}",
-                            task="your_app.tasks.sort_active_collections",
+                            task="shopify_app.tasks.sort_active_collections",
                             args=json.dumps([client.id])
                         )
                         current_hour += frequency_in_hours
-                        
+
+                else:
+                    return Response({"error": "Invalid custom schedule parameters"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Update other client settings
         if "stock_location" in data:
             client.stock_location = data["stock_location"]
 
-        
         if "lookback_periods" in data:
             client.lookback_period = data["lookback_period"]
 
         client.save()
 
-        return Response(
-            {
-                "message": "Global settings updated successfully",
-                "shop_id": client.shop_id,
-                "schedule_frequency": client.schedule_frequency,
-                "stock_location": client.stock_location,
-            },
-            status=status.HTTP_200_OK,
-        )
+        return Response({
+            "message": "Global settings updated successfully",
+            "shop_id": client.shop_id,
+            "schedule_frequency": client.schedule_frequency,
+            "stock_location": client.stock_location,
+        }, status=status.HTTP_200_OK)
 
     except Client.DoesNotExist:
         logger.error("Client not found")
@@ -1747,7 +1931,7 @@ def update_global_settings(request):  # working and not tested
 
     except Exception as e:
         logger.error(f"Exception occurred: {str(e)}")
-        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({"error for view": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])

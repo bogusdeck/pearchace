@@ -8,6 +8,8 @@ import pytz
 from django.utils import timezone
 from datetime import datetime, timedelta
 
+from celery import shared_task
+
 def _get_shopify_headers(access_token):
     return {"Content-Type": "application/json", "X-Shopify-Access-Token": access_token}
 
@@ -50,7 +52,6 @@ def fetch_collections(shop_url):
         variables = {"after": cursor} if cursor else {}
         response = requests.post(url, json={"query": query, "variables": variables}, headers=headers)
 
-        print(response.json())
         
         if response.status_code == 200:
             data = response.json()
@@ -515,8 +516,7 @@ def update_collection_products_order(
 
 #########################
 
-
-##not needed now 
+##not needed now might be in future
 def fetch_order_for_graph(shop_url, start_date, end_date):
     client = _get_client(shop_url)
     if not client:
@@ -588,7 +588,7 @@ def fetch_order_for_graph(shop_url, start_date, end_date):
         "total_revenue": total_revenue,
     }
 
-def fetch_products_for_graph(shop_url, collection_ids, start_date, end_date):   
+def fetch_products_for_graph(shop_url, collection_ids, start_date, end_date):
     client = _get_client(shop_url)
     if not client:
         return []
@@ -698,3 +698,6 @@ def fetch_products_for_graph(shop_url, collection_ids, start_date, end_date):
             }
 
     return products_data
+
+#####################################################################################################
+# orders feetching for billing checks
