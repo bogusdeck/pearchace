@@ -20,7 +20,6 @@ from shopify_app.models import (
     Usage,
     Subscription,
     SortingPlan,
-    SortingAlgorithm,
     ClientCollections,
     ClientProducts,
     ClientGraph,
@@ -421,6 +420,8 @@ def last_active_collections(request):  # working and tested
         shop_url = user.shop_url
         shop_id = user.shop_id
 
+        print(shop_url, shop_id)
+
         if not shop_url:
             return Response(
                 {"error": "Shop URL not found "}, status=status.HTTP_400_BAD_REQUEST
@@ -428,15 +429,19 @@ def last_active_collections(request):  # working and tested
 
         try:
             client = Client.objects.get(shop_url=shop_url)
+            print(client)
 
             collections = ClientCollections.objects.filter(
                 shop_id=shop_id, status=True
             ).order_by("-sort_date")[:5]
 
+            print("collections", collections)
+
             collections_data = []
             for collection in collections:
-                algo_name = ClientAlgo.objects.get(algo_id=collection.algo.id).name
-
+                print("collection loop", collection.collection_id)
+                algo_name = ClientAlgo.objects.get(algo_id=collection.algo.id).algo_name
+                print(algo_name)
                 collections_data.append(
                     {
                         "collection_id": collection.collection_id,
@@ -465,7 +470,7 @@ def last_active_collections(request):  # working and tested
                 {"error": "No collections found"}, status=status.HTTP_404_NOT_FOUND
             )
 
-        except SortingAlgorithm.DoesNotExist:
+        except ClientAlgo.DoesNotExist:
             return Response(
                 {"error": "Sorting algorithm not found"},
                 status=status.HTTP_404_NOT_FOUND,
@@ -624,7 +629,7 @@ def get_client_collections(request, client_id):  # working and tested
             return Response(
                 {"error": "Client not found"}, status=status.HTTP_404_NOT_FOUND
             )
-        except SortingAlgorithm.DoesNotExist:
+        except ClientAlgo.DoesNotExist:
             return Response(
                 {"error": "Sorting algorithm not found"},
                 status=status.HTTP_404_NOT_FOUND,
@@ -733,10 +738,10 @@ def update_collection(request, collection_id):  # working not tested
 
         if algo_id is not None:
             try:
-                algo = SortingAlgorithm.objects.get(algo_id=algo_id)
+                algo = ClientAlgo.objects.get(algo_id=algo_id)
                 collection.algo = algo
                 updated = True
-            except SortingAlgorithm.DoesNotExist:
+            except ClientAlgo.DoesNotExist:
                 return Response(
                             {"error": "Algorithm not found"}, status=status.HTTP_404_NOT_FOUND
                 )
@@ -848,7 +853,7 @@ def update_product_order(request):
 
 
 
-########## COLLECTION SETTING ############
+################################  COLLECTION SETTING #######################################
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated]) # last sort date for that collection
@@ -1544,7 +1549,6 @@ def update_collection_settings(request):  # working and tested
                 "out_of_stock_down": collection.out_of_stock_down,
                 "pinned_out_of_stock_down": collection.pinned_out_of_stock_down,
                 "new_out_of_stock_down": collection.new_out_of_stock_down,
-                "lookback_periods": collection.lookback_periods,
             },
             status=status.HTTP_200_OK,
         )
@@ -1648,7 +1652,7 @@ def get_sorting_algorithms(request):  # Updated for new UI
                 {"error": "Client not found"}, status=status.HTTP_404_NOT_FOUND
             )
 
-        primary_algorithms = SortingAlgorithm.objects.all()
+        primary_algorithms = ClientAlgo.objects.all()
         primary_algo_data = []
         for algo in primary_algorithms:
             primary_algo_data.append(
@@ -1722,8 +1726,8 @@ def update_default_algo(request):  # working and tested
             )
 
         try:
-            algo = SortingAlgorithm.objects.get(algo_id=algo_id)
-        except SortingAlgorithm.DoesNotExist:
+            algo = ClientAlgo.objects.get(algo_id=algo_id)
+        except ClientAlgo.DoesNotExist:
             return Response(
                 {"error": "Sorting algorithm not found"},
                 status=status.HTTP_404_NOT_FOUND,

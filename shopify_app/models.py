@@ -37,7 +37,7 @@ class Client(AbstractBaseUser):
     uninstall_date = models.DateTimeField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    default_algo = models.ForeignKey('SortingAlgorithm', on_delete=models.SET_NULL, null=True, blank=True)
+    default_algo = models.ForeignKey('ClientAlgo', on_delete=models.SET_NULL, to_field='algo_id',null=True, blank=True)
     member = models.BooleanField(default=False)
     lookback_period = models.IntegerField(default=30, blank=True, null=True)
     timezone = models.CharField(default='UTC', max_length=3)
@@ -103,7 +103,7 @@ class ClientCollections(models.Model):
     products_count = models.IntegerField(default=0)
     sort_date = models.DateTimeField(null=True, blank=True)
     pinned_products = models.JSONField(blank=True, null=True)
-    algo = models.ForeignKey('ClientAlgo', on_delete=models.CASCADE, null=True, blank=True)  
+    algo = models.ForeignKey('ClientAlgo', on_delete=models.CASCADE, to_field='algo_id', null=True, blank=True)  
     parameters_used = models.JSONField(default=dict)
     updated_at = models.DateTimeField(null=True, blank=True)
     out_of_stock_down = models.BooleanField(default=False)
@@ -157,24 +157,24 @@ class ClientAlgo(models.Model):
         return f"{self.algo_name} - {self.shop_id}"
 
 
-#done
-class SortingAlgorithm(models.Model):
-    algo_id = models.AutoField(primary_key=True)
-    name = models.CharField(max_length=255)
-    description = models.TextField(null=True, blank=True)
-    default_parameters = models.JSONField(default=dict)
-    created_at = models.DateTimeField(default=timezone.now)
-    updated_at = models.DateTimeField(auto_now=True)
+# #done
+# class SortingAlgorithm(models.Model):
+#     algo_id = models.AutoField(primary_key=True)
+#     name = models.CharField(max_length=255)
+#     description = models.TextField(null=True, blank=True)
+#     default_parameters = models.JSONField(default=dict)
+#     created_at = models.DateTimeField(default=timezone.now)
+#     updated_at = models.DateTimeField(auto_now=True)
 
-    def __str__(self):
-        return self.name
+#     def __str__(self):
+#         return self.name
 
-def default_parameters_used():
-    return {
-        "days": 7,
-        "percentile": None,
-        "variant_threshold": None
-    }
+# def default_parameters_used():
+#     return {
+#         "days": 7,
+#         "percentile": None,
+#         "variant_threshold": None
+#     }
 
 
 #done

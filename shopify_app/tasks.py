@@ -2,7 +2,7 @@
 from celery import shared_task, chord
 from django.db import transaction
 from django.utils import timezone
-from .models import Client, ClientCollections, ClientProducts, SortingAlgorithm, ClientAlgo, ClientGraph
+from .models import Client, ClientCollections, ClientProducts, ClientAlgo, ClientGraph
 from .api import (
     fetch_collections,
     fetch_products_by_collection,

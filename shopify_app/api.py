@@ -516,7 +516,7 @@ def update_collection_products_order(
 
 #########################
 
-##not needed now 
+##not needed now might be in future
 def fetch_order_for_graph(shop_url, start_date, end_date):
     client = _get_client(shop_url)
     if not client:
@@ -588,7 +588,7 @@ def fetch_order_for_graph(shop_url, start_date, end_date):
         "total_revenue": total_revenue,
     }
 
-def fetch_products_for_graph(shop_url, collection_ids, start_date, end_date):   
+def fetch_products_for_graph(shop_url, collection_ids, start_date, end_date):
     client = _get_client(shop_url)
     if not client:
         return []
@@ -698,3 +698,6 @@ def fetch_products_for_graph(shop_url, collection_ids, start_date, end_date):
             }
 
     return products_data
+
+#####################################################################################################
+# orders feetching for billing checks
