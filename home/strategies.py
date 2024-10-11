@@ -169,7 +169,7 @@ def remove_pinned_products(products, pinned_product_ids):
     non_pinned_products = []
 
     for product in products:
-        if product['id'] in pinned_product_ids_str:
+        if product['product_id'] in pinned_product_ids_str:
             pinned_products.append(product)
         else:
             non_pinned_products.append(product)
@@ -185,7 +185,7 @@ def push_out_of_stock_down(products):
     out_of_stock_products = []
 
     for product in products:
-        if product['totalInventory'] > 0:
+        if product['total_inventory'] > 0:
             in_stock_products.append(product)
         else:
             out_of_stock_products.append(product)  
@@ -196,7 +196,7 @@ def segregate_pinned_products(pinned_products):
     ofs_pinned_products = []
     in_stock_pinned_products = []
     for product in pinned_products:
-        if product['totalInventory'] > 0:
+        if product['total_inventory'] > 0:
             in_stock_pinned_products.append(product)
         else:
             ofs_pinned_products.append(product)

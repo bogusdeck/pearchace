@@ -39,7 +39,7 @@ class Client(AbstractBaseUser):
     updated_at = models.DateTimeField(auto_now=True)
     default_algo = models.ForeignKey('SortingAlgorithm', on_delete=models.SET_NULL, null=True, blank=True)
     member = models.BooleanField(default=False)
-    lookback_period = models.IntegerField(default=7, blank=True, null=True)
+    lookback_period = models.IntegerField(default=30, blank=True, null=True)
     timezone = models.CharField(default='UTC', max_length=3)
     createdateshopify = models.DateTimeField(blank=True, null=True)
     billingAddress = models.JSONField(default=dict)
@@ -111,6 +111,7 @@ class ClientCollections(models.Model):
     new_out_of_stock_down = models.BooleanField(default=False)
     refetch = models.BooleanField(default=True)
     collection_total_revenue = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
+    collection_sold_units = models.IntegerField(default=0)
 
     class Meta:
         unique_together = ('shop_id', 'collection_id')
@@ -144,7 +145,7 @@ class ClientProducts(models.Model):
 #new
 class ClientAlgo(models.Model):
     shop = models.ForeignKey('Client', on_delete=models.CASCADE, to_field='shop_id', null=True, blank=True)  
-    clalgo_id = models.AutoField(primary_key=True)
+    algo_id = models.AutoField(primary_key=True)
     algo_name = models.CharField(max_length=255)
     number_of_buckets = models.IntegerField()
     boost_tags = models.JSONField(blank=True, default=list)
@@ -253,9 +254,9 @@ class PlanHistory(models.Model):
         return f"Plan History {self.id} for {self.client.shop_name}"
     
 
-#clientstrategies
+#clientgraph
 class ClientGraph(models.Model):
-    client = models.ForeignKey(Client, on_delete=models.CASCADE, to_field='shop_id')
+    shop = models.ForeignKey(Client, on_delete=models.CASCADE, to_field='shop_id')
     date = models.DateField()
     revenue = models.DecimalField(max_digits=15, decimal_places=2)
 
