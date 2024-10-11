@@ -701,3 +701,46 @@ def fetch_products_for_graph(shop_url, collection_ids, start_date, end_date):
 
 #####################################################################################################
 # orders feetching for billing checks
+#####################################################################################################
+
+def fetch_order_for_billing(shop_url, start_date, end_date):
+    client = _get_client(shop_url)
+    if not client:
+        return None
+
+    access_token = client.access_token
+    api_version = apps.get_app_config("shopify_app").SHOPIFY_API_VERSION
+    headers = _get_shopify_headers(access_token)
+    url = f"https://{shop_url}/admin/api/{api_version}/graphql.json"
+
+    total_orders = 0
+    has_next_page = True
+    after_cursor = None
+
+    while has_next_page:
+        pagination_query = f', after: "{after_cursor}"' if after_cursor else ""
+        query = f"""
+        {{
+          orders(first: 250, query: "created_at:>{start_date.isoformat()} AND created_at:<{end_date.isoformat()}"{pagination_query}) {{
+            edges {{
+              cursor
+            }}
+            pageInfo {{
+              hasNextPage
+            }}
+          }}
+        }}
+        """
+
+        response = requests.post(url, json={"query": query}, headers=headers)
+        if response.status_code != 200:
+            print(f"Error fetching orders: {response.status_code} - {response.text}")
+            return None
+
+        data = response.json().get("data", {}).get("orders", {})
+        new_orders = data.get("edges", [])
+        has_next_page = data.get("pageInfo", {}).get("hasNextPage", False)
+        after_cursor = new_orders[-1]["cursor"] if has_next_page else None
+        total_orders += len(new_orders)
+
+    return total_orders

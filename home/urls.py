@@ -47,4 +47,5 @@ urlpatterns = [
     path('api/advance-config/', views.advance_config, name='advance-config'),
     path('api/get-graph/', views.get_graph, name='get-graph'),
     path('api/get-collection-analytics/<int:collection_id>/', views.get_collection_analytics, name='get-collection-analytics'),
+    path('api/order-count/', views.fetch_last_month_order_count, name='fetch_last_month_order_count'),
 ]

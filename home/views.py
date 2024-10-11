@@ -972,7 +972,7 @@ def get_products(request, collection_id):
                     "total_inventory" : product.total_inventory,
                     "image_link" : product.image_link,
                 }
-                
+                print("acha btau abhi")
                 print(product.product_id, pinned_product_ids)
 
                 if str(product.product_id) in map(str, pinned_product_ids):
@@ -1654,17 +1654,33 @@ def get_sorting_algorithms(request):  # Updated for new UI
 
         primary_algorithms = ClientAlgo.objects.all()
         primary_algo_data = []
+
+
+        def get_algorithm_description(algo_name):
+            descriptions = {
+                "Promote New": "Promotes new products based on the number of days they have been listed.",
+                "Promote High Revenue Products": "Promotes products with high revenue based on the number of days and percentile.",
+                "Promote High Inventory Products": "Promotes products with high inventory based on the number of days and percentile.",
+                "Bestsellers": "Promotes products based on sales, sorted from high to low or low to high sales volume",
+                "Promote High Variant Availability": "Promotes products with high variant availability based on a variant threshold.",
+                "I'm Feeling Lucky": "Randomly Choose Sorting to promote products.",
+                "RFM": "Promotes products based on Recency, Frequency, and Monetary value."
+            }
+            return descriptions.get(algo_name, "Description not available.")
+        
+
         for algo in primary_algorithms:
             primary_algo_data.append(
                 {
                     "algo_id": algo.algo_id,
-                    "name": algo.name,
-                    "description": algo.description,
+                    "name": algo.algo_name,
+                    "description": get_algorithm_description(algo.algo_name)
                 }
             )
 
         client_algorithms = ClientAlgo.objects.filter(shop_id=client)
         client_algo_data = []
+
         for algo in client_algorithms:
             client_algo_data.append(
                 {
@@ -1996,14 +2012,71 @@ def get_and_update_collections(request):  # working and tested
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+
+#######################################################################################################
+# ██████  ██ ██      ██      ██ ███    ██  ██████  
+# ██   ██ ██ ██      ██      ██ ████   ██ ██       
+# ██████  ██ ██      ██      ██ ██ ██  ██ ██   ███ 
+# ██   ██ ██ ██      ██      ██ ██  ██ ██ ██    ██ 
+# ██████  ██ ███████ ███████ ██ ██   ████  ██████  ⁡
+#######################################################################################################
+
+from shopify_app.api import fetch_order_for_billing
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def fetch_last_month_order_count(request):
+    # Get the first and last dates of the previous month
+    auth_header = request.headers.get("Authorization", None)
+    if auth_header is None:
+        return Response(
+            {"error": "Authorization header missing"},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    try:
+        token = auth_header.split(" ")[1]
+        jwt_auth = JWTAuthentication()
+        validated_token = jwt_auth.get_validated_token(token)
+        user = jwt_auth.get_user(validated_token)
+
+        shop_url = user.shop_url
+        if not shop_url:
+            return Response(
+                {"error": "Shop URL not found"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        
+        today = datetime.today()
+        print("today : ",today)
+        first_day_last_month = (today.replace(day=1) - timedelta(days=1)).replace(day=1)
+        last_day_last_month = today.replace(day=1) - timedelta(days=1)
+
+        print("1st day : ",first_day_last_month," last day : ", last_day_last_month)
+
+        order_count = fetch_order_for_billing(shop_url, first_day_last_month, last_day_last_month)
+        print("result : ", order_count)
+
+        if not order_count:
+            return Response({"error": "Error fetching orders"}, status=500)
+        
+        return Response({"order_count": order_count}, status=status.HTTP_200_OK)
+    
+    except InvalidToken:
+        return Response({"error": "Invalid token"}, status=status.HTTP_401_UNAUTHORIZED)
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+      
+
 #######################################################################################################
 # ██   ██ ██ ███████ ████████  ██████  ██████  ██    ██ 
 # ██   ██ ██ ██         ██    ██    ██ ██   ██  ██  ██  
 # ███████ ██ ███████    ██    ██    ██ ██████    ████   
 # ██   ██ ██      ██    ██    ██    ██ ██   ██    ██    
 # ██   ██ ██ ███████    ██     ██████  ██   ██    ██    
-#######################################################################################################
-                                                      
+#######################################################################################################                                        
 # ⁡⁣⁢⁣status api endpoint ⁡
 
 

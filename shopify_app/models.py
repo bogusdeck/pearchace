@@ -102,7 +102,7 @@ class ClientCollections(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     products_count = models.IntegerField(default=0)
     sort_date = models.DateTimeField(null=True, blank=True)
-    pinned_products = models.JSONField(blank=True, null=True)
+    pinned_products = models.JSONField(blank=True, default=list)
     algo = models.ForeignKey('ClientAlgo', on_delete=models.CASCADE, to_field='algo_id', null=True, blank=True)  
     parameters_used = models.JSONField(default=dict)
     updated_at = models.DateTimeField(null=True, blank=True)
