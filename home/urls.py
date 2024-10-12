@@ -7,7 +7,8 @@ urlpatterns = [
     path('', views.index, name='root_path'),
     path('api/get-client-info/', views.get_client_info, name="get_client_info"), #
     # dashboard 
-    # path('api/get-graph/',views.graph_dashboard, name='get-graph')
+    path('api/get-graph/', views.get_graph, name='get-graph'),
+    # path('api/get-graph/',views.graph_dashboard, name='get-graph'),
     path('api/available-sorts/', views.available_sorts, name='available_sorts'), #
     path('api/last-active-collections/', views.last_active_collections, name='last_active_collections'), #
     # collection manager
@@ -45,7 +46,6 @@ urlpatterns = [
     path('api/applied-on-active-collection/', views.applied_on_active_collection, name='applied-on-active-collection'),
     path('api/sorting-rule/<int:algo_id>/', views.sorting_rule, name='sorting-rule'),
     path('api/advance-config/', views.advance_config, name='advance-config'),
-    path('api/get-graph/', views.get_graph, name='get-graph'),
     path('api/get-collection-analytics/<int:collection_id>/', views.get_collection_analytics, name='get-collection-analytics'),
     path('api/order-count/', views.fetch_last_month_order_count, name='fetch_last_month_order_count'),
 ]
