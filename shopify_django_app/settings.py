@@ -93,14 +93,14 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'postgres',
-        'USER': 'postgres.yxwpovmkmypckodwcxaj',
+        'USER': 'postgres.jvrxcmgysgowxuuptgur',
         'PASSWORD':'PearchTest@123',
         'HOST':'aws-0-ap-south-1.pooler.supabase.com',
         'PORT':'6543',
     }
 }
 
-# user=postgres.yxwpovmkmypckodwcxaj password=[YOUR-PASSWORD] host=aws-0-ap-south-1.pooler.supabase.com port=6543 dbname=postgres
+# user=postgres.jvrxcmgysgowxuuptgur password=[YOUR-PASSWORD] host=aws-0-ap-south-1.pooler.supabase.com port=6543 dbname=postgres
 # user= pearchuser , name=pearchdb , password = PearchTest@123 , host=db , port = 5432 
 
 MONGODB_SETTINGS = {
