@@ -301,28 +301,24 @@ def get_graph(request):
             start_date = datetime.strptime(start_date_str, "%d/%m/%Y").date()
             end_date = datetime.strptime(end_date_str, "%d/%m/%Y").date()
 
-            if start_date > end_date:
-                return Response({"error": "Start date must be earlier than end date."}, status=status.HTTP_400_BAD_REQUEST)
+            adjusted_end_date = end_date - timedelta(days=1)
 
-            delta = end_date - start_date
+            if start_date > adjusted_end_date:
+                return Response({"error": "Start date must be earlier than the day before end date."}, status=status.HTTP_400_BAD_REQUEST)
+
+            delta = adjusted_end_date - start_date
             date_list = [start_date + timedelta(days=i) for i in range(delta.days + 1)]
 
             revenue_data = {date: 0 for date in date_list}
 
-            revenue_entries = ClientGraph.objects.filter(shop_id=shop_id, date__range=[start_date, end_date])
+            revenue_entries = ClientGraph.objects.filter(shop_id=shop_id, date__range=[start_date, adjusted_end_date])
 
             for entry in revenue_entries:
                 revenue_data[entry.date] = entry.revenue
 
-        
-            formatted_dates = [date.strftime("%d/%m/%Y") for date in date_list]
+            dates_data = [{"date": date.strftime("%d/%m/%Y"), "revenue": revenue_data[date]} for date in date_list]
 
-            
-            response_data = {
-                'graph_dates': formatted_dates,  # 
-            }
-
-            # Top 5 products globally on the basis of REVENUE
+            # top 5 products globally on the basis of REVENUE
             top_products_by_revenue = ClientProducts.objects.filter(shop_id=shop_id)\
                 .order_by('-total_revenue')[:5] 
             
@@ -335,7 +331,7 @@ def get_graph(request):
                 for product in top_products_by_revenue
             ]
 
-            # Top 5 products globally on the basis of SALES
+            # top 5 products globally on the basis of SALES
             top_products_by_sales = ClientProducts.objects.filter(shop_id=shop_id)\
                 .order_by('-total_sold_units')[:5]  
             
@@ -348,7 +344,7 @@ def get_graph(request):
                 for product in top_products_by_sales
             ]
             
-            # Top 5 collections globally on the basis of REVENUE
+            # top 5 collections globally on the basis of REVENUE
             top_collections_by_revenue = ClientCollections.objects.filter(shop_id=shop_id)\
                 .order_by('-collection_total_revenue')[:5]  
             
@@ -361,7 +357,7 @@ def get_graph(request):
                 for collection in top_collections_by_revenue
             ]
             
-            # Top 5 collections globally on the basis of SALES
+            # top 5 collections globally on the basis of SALES
             top_collections_by_sales = ClientCollections.objects.filter(shop_id=shop_id)\
                 .order_by('-collection_sold_units')[:5]  
             
@@ -374,13 +370,14 @@ def get_graph(request):
                 for collection in top_collections_by_sales
             ]
 
-            # Update response with top products and collections data
-            response_data.update({
+            # Construct the final response
+            response_data = {
+                'dates': dates_data,  # Dates with corresponding revenues
                 'top_products_by_revenue': top_products_revenue_data,
                 'top_products_by_sales': top_products_sales_data,
                 'top_collections_by_revenue': top_collections_revenue_data,
                 'top_collections_by_sales': top_collections_sales_data,
-            })
+            }
 
             return Response(response_data)
 
@@ -399,6 +396,7 @@ def get_graph(request):
         return JsonResponse(
             {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
 
     
 @api_view(["GET"]) # client's last active collections which are sorted by us 
