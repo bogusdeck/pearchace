@@ -159,6 +159,8 @@ def fetch_products_by_collection(shop_url, collection_id, days):
     orders = fetch_orders(shop_url, days, headers)
     print("orders fetching done")
 
+    product_sales_data = {}
+    
     url = f"https://{shop_url}/admin/api/{api_version}/graphql.json"
     products = []
     has_next_page = True
@@ -236,9 +238,25 @@ def fetch_products_by_collection(shop_url, collection_id, days):
             print(f"Error fetching products: {response.status_code} - {response.text}")
             break
 
-    return [
-        {
-            "id": product["node"]["id"].split("/")[-1],
+    products_data = []
+    for product in products:
+        product_id = product["node"]["id"].split("/")[-1]
+
+        recency_score = calculate_recency_score(orders, product["node"]["id"])
+        print("recency score : ", recency_score)
+        revenue = calculate_revenue_from_orders(orders, product["node"]["id"])
+        sales_velocity = calculate_sales_velocity_from_orders(orders, product["node"]["id"], days)
+        total_sold_units =  calculate_sales_velocity_from_orders(orders, product["node"]["id"], days, return_units=True)
+
+        # try:
+        #     client_product = ClientProducts.objects.get(product_id=product_id, shop=client)
+        #     client_product.recency_score = recency_score
+        #     client_product.save()
+        # except ClientProducts.DoesNotExist:
+        #     print(f"Product {product_id} not found in ClientProducts. Skipping update.")
+
+        products_data.append({
+            "id": product_id,
             "title": product["node"]["title"],
             "image": product["node"]["images"]["edges"][0]["node"]["src"] if product["node"]["images"]["edges"] else None,
             "totalInventory": product["node"]["totalInventory"],
@@ -246,17 +264,18 @@ def fetch_products_by_collection(shop_url, collection_id, days):
             "published_at": product["node"]["publishedAt"],
             "updated_at": product["node"]["updatedAt"],
             "tags": product["node"].get("tags", []),
-            "revenue": calculate_revenue_from_orders(orders, product["node"]["id"]),
-            "sales_velocity": calculate_sales_velocity_from_orders(orders, product["node"]["id"], days),
-            "total_sold_units": calculate_sales_velocity_from_orders(orders, product["node"]["id"], days, return_units=True),
+            "revenue": revenue,
+            "sales_velocity": sales_velocity,
+            "total_sold_units": total_sold_units,
             "variants_count": product["node"]["variantsCount"]["count"],
             "variant_availability": sum(
                 variant["node"]["inventoryQuantity"]
                 for variant in product["node"]["variants"]["edges"]
             ),
-        }
-        for product in products
-    ]
+            "recency_score": recency_score,
+        })
+
+    return products_data
 
 def fetch_orders(shop_url, days, headers):
     """
@@ -333,19 +352,38 @@ def calculate_revenue_from_orders(orders, product_id):
                 total_revenue += price * quantity
                 print("total revuenue" ,total_revenue)
 
-    # with open("product_ids.txt", "a") as file:
-    #     for order in orders:
-    #         for line_item in order["node"]["lineItems"]["edges"]:
-    #             product_id_in_order = line_item["node"]["product"]["id"]
-    #             # Write to the file instead of printing
-    #             file.write(f"{product_id_in_order}, {product_id}\n")
-                
-    #             if product_id_in_order == f"gid://shopify/Product/{product_id}":
-    #                 price = float(line_item["node"]["originalUnitPriceSet"]["shopMoney"]["amount"])
-    #                 quantity = int(line_item["node"]["quantity"])
-    #                 total_revenue += price * quantity
-    #                 file.write(f"Total revenue so far: {total_revenue}\n")
     return total_revenue
+
+
+from datetime import datetime, timezone as dt_timezone
+from django.utils import timezone
+
+def calculate_recency_score(orders, product_id):
+    last_order_date = None
+
+    for order in orders:
+        for line_item in order["node"]["lineItems"]["edges"]:
+            if line_item["node"]["product"]["id"] == product_id:
+                order_date_str = order["node"]["createdAt"]
+
+
+                if order_date_str.endswith('Z'):
+                    order_date = datetime.strptime(order_date_str, '%Y-%m-%dT%H:%M:%SZ')
+                    order_date = order_date.replace(tzinfo=dt_timezone.utc)  
+                else:
+                    order_date = datetime.fromisoformat(order_date_str)
+
+                if not last_order_date or order_date > last_order_date:
+                    last_order_date = order_date
+
+    if last_order_date:
+        recency_score = (timezone.now() - last_order_date).days
+    else:
+        # recency_score = float('inf')
+        recency_score = 0
+
+    return recency_score
+
 
 def calculate_sales_velocity_from_orders(orders, product_id, days, return_units=False):
     total_sold_units = 0
