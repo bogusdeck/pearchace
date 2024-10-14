@@ -23,7 +23,6 @@ from rest_framework_simplejwt.exceptions import InvalidToken
 load_dotenv()
 
 
-# Function to safely convert Decimal fields to JSON serializable format
 def decimal_to_float(data):
     if isinstance(data, Decimal):
         return float(data)
@@ -35,14 +34,16 @@ def decimal_to_float(data):
 
 # Shopify Billing Logic
 def create_recurring_charge(shop_url, access_token, plan_id):
+    print("creation of recurring charge ......")
     shopify.Session.setup(api_key=os.environ.get('SHOPIFY_API_KEY'), secret=os.environ.get('SHOPIFY_API_SECRET'))
     session = shopify.Session(shop_url, os.environ.get('SHOPIFY_API_VERSION'), access_token)
     shopify.ShopifyResource.activate_session(session)
     
-
+    print('getting plan.....')
     plan = SortingPlan.objects.get(plan_id=plan_id)
+    print(plan)
     plan_name = plan.name
-    plan_price = plan.cost_month
+    plan_price = float(plan.cost_month)
 
     charge = shopify.RecurringApplicationCharge({
         "name": plan_name,
@@ -50,13 +51,14 @@ def create_recurring_charge(shop_url, access_token, plan_id):
         "test": True,
         "trial_days": 14,
         "return_url": "https://pearch.vercel.app",
-        "terms": "Your plan description here"
+        "terms": "description"
     })
-
+    
+    print("charge....", charge)
+    
     if charge.save():
         return charge.confirmation_url
     else:
-        # Print full error messages
         errors = charge.errors.full_messages()
         print(f"Charge save failed with errors: {errors}")
         raise Exception("Failed to create recurring charge.")
@@ -119,6 +121,8 @@ def create_billing_plan(request):
         validated_token = jwt_auth.get_validated_token(token)
         user = jwt_auth.get_user(validated_token)
         
+        print("billing plan creating......")
+        
         shop_url = user.shop_url
         shop_id = user.shop_id
 
@@ -135,9 +139,12 @@ def create_billing_plan(request):
 
             if not shop_id or not access_token:
                 return JsonResponse({'error': 'Shop id or access token is missing'}, status=400)
-
+            
+            print(shop_url, access_token, plan_id)
+            print("billing url generation.......")
             billing_url = create_recurring_charge(shop_url, access_token, plan_id)
-            return redirect(billing_url)
+            # return redirect(billing_url) #testing new method
+            return Response ({'billing_url':billing_url}, status=status.HTTP_200_OK)
         except Client.DoesNotExist:
             return Response({'error': 'Client not found'}, status=status.HTTP_404_NOT_FOUND)
         except SortingPlan.DoesNotExist:
@@ -193,7 +200,7 @@ def confirm_billing(request):
         return Response({'error': str(e)}, status=400)
 
 
-# App Uninstall Webhook to handle charge cancellation
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 @csrf_exempt
@@ -217,8 +224,7 @@ def handle_app_uninstall(request):
         access_token = get_access_token(shop_url)
         if not access_token:
             return Response({'error': 'access token not found in session'}, status=status.HTTP_400_BAD_REQUEST)   
-        # client = Client.objects.get(shop_id=shop_id)
-        # access_token = client.access_token   
+        
         cancel_active_recurring_charges(shop_url, access_token)
         return Response({'status': 'App uninstall handled successfully'}, status=200)
         

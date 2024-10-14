@@ -138,6 +138,8 @@ class ClientProducts(models.Model):
     sales_velocity = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     total_sold_units = models.IntegerField(default=0)
     position_in_collection = models.IntegerField(default=0)
+    recency_score = models.FloatField(default=0)
+
 
     def __str__(self):
         return f"Product {self.product_name} (ID: {self.product_id}) for shop_id {self.shop_id}"

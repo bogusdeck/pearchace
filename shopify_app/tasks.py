@@ -31,16 +31,20 @@ from home.rules import (
     Number_of_sales,
     product_tags,
     product_inventory,
+    i_am_feeling_lucky,
+    rfm_sort
 )
 
 ALGO_ID_TO_FUNCTION = {
     "new_products": new_products,  
-    "revenue generated": revenue_generated,  
-    "inventory quantity": inventory_quantity,  
-    "variant availability ratio": variant_availability_ratio,  
-    "number of sales": Number_of_sales, 
-    "product tags": product_tags,  
-    "product inventory": product_inventory,  
+    "revenue_generated": revenue_generated,  
+    "inventory_quantity": inventory_quantity,  
+    "variant_availability_ratio": variant_availability_ratio,  
+    "Number_of_sales": Number_of_sales, 
+    "product_tags": product_tags,  
+    "product_inventory": product_inventory,
+    "i_am_feeling_lucky":i_am_feeling_lucky,
+    "rfm_sort":rfm_sort
 }
 
 from decimal import Decimal
@@ -121,7 +125,8 @@ def async_fetch_and_store_products(shop_url, shop_id, collection_id, days):
             print('revenue', revenue)
             sales_velocity = product.get("sales_velocity", 0.00)
             total_sold_units = product.get("total_sold_units", 0)
-
+            recency_score = product.get("recency_score", None)
+            
             total_revenue += revenue
             total_sales += total_sold_units
 
@@ -142,7 +147,8 @@ def async_fetch_and_store_products(shop_url, shop_id, collection_id, days):
                     'variant_availability': variant_availability,
                     'total_inventory': total_inventory,
                     'total_sold_units': total_sold_units,
-                    'sales_velocity': float(sales_velocity)
+                    'sales_velocity': float(sales_velocity),
+                    'recency_score': recency_score
                 }
             )
 
@@ -201,6 +207,7 @@ def async_cron_sort_product_order(shop_id, collection_id, algo_id):
             new_order.extend(pinned_products)  
         else:
             pinned_products = []
+            ofs_pinned = []
         
 
         if client_collection.out_of_stock_down:
@@ -276,6 +283,8 @@ def async_cron_sort_product_order(shop_id, collection_id, algo_id):
 def pid_extractor(products):
     return [int(product['product_id']) for product in products]
 
+import json
+
 @shared_task
 def async_sort_product_order(shop_id, collection_id, algo_id):
     try:
@@ -288,7 +297,7 @@ def async_sort_product_order(shop_id, collection_id, algo_id):
         products = ClientProducts.objects.filter(shop_id=shop_id, collection_id=collection_id).values(
             "product_id", "product_name", "total_sold_units" , "created_at", "updated_at", "published_at", 
             "tags", "variant_count", "variant_availability", "total_revenue", "total_inventory", 
-            "sales_velocity"
+            "sales_velocity","recency_score"
         )
 
         print("total products fetched from database :", len(products))
@@ -318,6 +327,7 @@ def async_sort_product_order(shop_id, collection_id, algo_id):
             new_order.extend(pinned_products)  #
         else:
             pinned_products = []
+            ofs_pinned = []
         
         print("products, pinned products  alg alg ho gye ", len(products), len(pinned_products), len(ofs_pinned))
 
@@ -336,8 +346,6 @@ def async_sort_product_order(shop_id, collection_id, algo_id):
         buckets = client_algo.bucket_parameters
         
         print(buckets)
-
-        # print("tags and bucket yh rhi ", boost_tags, bury_tags, buckets)
         
         boost_tag_products = [product for product in products if any(tag in product["tags"] for tag in boost_tags)]
         new_order.extend(boost_tag_products) #
@@ -348,6 +356,9 @@ def async_sort_product_order(shop_id, collection_id, algo_id):
         products = [product for product in products if product not in bury_tag_products]
 
 
+        
+        # print(json.dumps(products, indent=4, default=str))
+        
         
         if isinstance(buckets, dict):
             buckets = [buckets]  

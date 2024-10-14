@@ -398,7 +398,6 @@ def get_graph(request):
         )
 
 
-    
 @api_view(["GET"]) # client's last active collections which are sorted by us 
 @permission_classes([IsAuthenticated])
 def last_active_collections(request):  # working and tested
@@ -417,6 +416,7 @@ def last_active_collections(request):  # working and tested
         validated_token = jwt_auth.get_validated_token(token)
         user = jwt_auth.get_user(validated_token)
 
+        print("running")
         shop_url = user.shop_url
         shop_id = user.shop_id
 
@@ -440,7 +440,7 @@ def last_active_collections(request):  # working and tested
             collections_data = []
             for collection in collections:
                 print("collection loop", collection.collection_id)
-                algo_name = ClientAlgo.objects.get(algo_id=collection.algo.id).algo_name
+                algo_name = ClientAlgo.objects.get(algo_id=collection.algo_id).algo_name #
                 print(algo_name)
                 collections_data.append(
                     {
@@ -1117,7 +1117,6 @@ def search_products(request, collection_id):  #
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-
 @api_view(['GET'])
 @permission_classes([IsAuthenticated]) #done and tested
 def preview_products(request):
@@ -1490,6 +1489,62 @@ def applied_on_active_collection(request):
 
 
 ############################## GENERAL SETTINGS FOR COLLECTION ####################################
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def sort_now(request):  
+    try:
+        auth_header = request.headers.get("Authorization", None)
+        if auth_header is None:
+            return Response(
+                {"error": "Authorization header missing"},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        token = auth_header.split(" ")[1]
+        jwt_auth = JWTAuthentication()
+        validated_token = jwt_auth.get_validated_token(token)
+        user = jwt_auth.get_user(validated_token)
+
+        shop_id = user.shop_id
+        if not shop_id:
+            return Response(
+                {"error": "Shop ID not found in JWT token"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+
+        try:
+            client = Client.objects.get(shop_id=shop_id)
+        except Client.DoesNotExist:
+            return Response(
+                {"error": "Client not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        collection_id = request.data.get("collection_id")
+        algo_id = request.data.get("algo_id")
+
+        if not collection_id:
+            return Response(
+                {"error": "Collection ID is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not algo_id:
+            return Response(
+                {"error": "Algorithm ID is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+                    
+        async_sort_product_order.delay(shop_id, collection_id, algo_id)
+
+        return Response({"message": "Sorting initiated"}, status=status.HTTP_202_ACCEPTED)
+
+    except InvalidToken:
+        return Response({"error": "Invalid token"}, status=status.HTTP_401_UNAUTHORIZED)
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated]) # require to update lookback periods as it is moved to global settings
@@ -1561,7 +1616,6 @@ def update_collection_settings(request):  # working and tested
 
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 ############################ ANALYTICS TABS FOR COLLECTION ########################################
 @api_view(['GET'])
@@ -1650,9 +1704,7 @@ def get_sorting_algorithms(request):  # Updated for new UI
                 {"error": "Client not found"}, status=status.HTTP_404_NOT_FOUND
             )
 
-        primary_algorithms = ClientAlgo.objects.all()
-        primary_algo_data = []
-
+        default_algo = client.default_algo
 
         def get_algorithm_description(algo_name):
             descriptions = {
@@ -1665,26 +1717,29 @@ def get_sorting_algorithms(request):  # Updated for new UI
                 "RFM": "Promotes products based on Recency, Frequency, and Monetary value."
             }
             return descriptions.get(algo_name, "Description not available.")
-        
 
+
+        primary_algorithms = ClientAlgo.objects.all()
+        primary_algo_data = []
         for algo in primary_algorithms:
             primary_algo_data.append(
                 {
                     "algo_id": algo.algo_id,
                     "name": algo.algo_name,
-                    "description": get_algorithm_description(algo.algo_name)
+                    "description": get_algorithm_description(algo.algo_name),
+                    "default": algo == default_algo
                 }
             )
 
         client_algorithms = ClientAlgo.objects.filter(shop_id=client)
         client_algo_data = []
-
         for algo in client_algorithms:
             client_algo_data.append(
                 {
                     "algo_id": algo.algo_id,
                     "algo_name": algo.algo_name,
                     "number_of_buckets": algo.number_of_buckets,
+                    "default": algo == default_algo  
                 }
             )
 
@@ -2055,6 +2110,8 @@ def fetch_last_month_order_count(request):
         order_count = fetch_order_for_billing(shop_url, first_day_last_month, last_day_last_month)
         print("result : ", order_count)
 
+        order_count = 16000
+        
         if not order_count:
             return Response({"error": "Error fetching orders"}, status=500)
         
@@ -2066,7 +2123,6 @@ def fetch_last_month_order_count(request):
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
-      
 
 #######################################################################################################
 # ██   ██ ██ ███████ ████████  ██████  ██████  ██    ██ 
