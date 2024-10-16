@@ -14,7 +14,7 @@ from rest_framework import status
 from rest_framework_simplejwt.exceptions import InvalidToken
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.permissions import AllowAny
-from .models import Client, ClientCollections
+from .models import Client, ClientCollections, ClientProducts
 import os
 from dotenv import load_dotenv
 
@@ -205,8 +205,10 @@ def customer_data_erasure(request):
 
     try:
         client = Client.objects.get(email=email)
+        # ClientProducts.objects.filter(shop_id=client.shop_id).delete()
         # ClientCollections.objects.filter(shop_id=client.shop_id).delete()  
         # client.delete()  
+        
         if client:
             return Response({'message': 'Customer data erased successfully'}, status=status.HTTP_200_OK)
         else: 
@@ -224,7 +226,9 @@ def shop_data_erasure(request):
         return Response({'error': 'Shop ID is required'}, status=status.HTTP_400_BAD_REQUEST)
 
     try:
+        # ClientProducts.objects.filter(shop_id=client.shop_id).delete()
         # ClientCollections.objects.filter(shop_id=shop_id).delete()
+        # client.delete()  
         if ClientCollections.objects.filter(shop_id=shop_id):
             return Response({'message': 'Shop data erased successfully'}, status=status.HTTP_200_OK)
         else: 

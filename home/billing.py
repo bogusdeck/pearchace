@@ -32,36 +32,6 @@ def decimal_to_float(data):
         return [decimal_to_float(i) for i in data]
     return data
 
-# Shopify Billing Logic
-def create_recurring_charge(shop_url, access_token, plan_id):
-    print("creation of recurring charge ......")
-    shopify.Session.setup(api_key=os.environ.get('SHOPIFY_API_KEY'), secret=os.environ.get('SHOPIFY_API_SECRET'))
-    session = shopify.Session(shop_url, os.environ.get('SHOPIFY_API_VERSION'), access_token)
-    shopify.ShopifyResource.activate_session(session)
-    
-    print('getting plan.....')
-    plan = SortingPlan.objects.get(plan_id=plan_id)
-    print(plan)
-    plan_name = plan.name
-    plan_price = float(plan.cost_month)
-
-    charge = shopify.RecurringApplicationCharge({
-        "name": plan_name,
-        "price": plan_price,
-        "test": True,
-        "trial_days": 14,
-        "return_url": "https://pearch.vercel.app",
-        "terms": "description"
-    })
-    
-    print("charge....", charge)
-    
-    if charge.save():
-        return charge.confirmation_url
-    else:
-        errors = charge.errors.full_messages()
-        print(f"Charge save failed with errors: {errors}")
-        raise Exception("Failed to create recurring charge.")
 
 
 def activate_recurring_charge(shop_url, access_token, charge_id):
@@ -105,6 +75,39 @@ def cancel_active_recurring_charges(shop_url, access_token):
         subscription.cancelled_at = timezone.now()
         subscription.save()
 
+# Shopify Billing Logic
+def create_recurring_charge(shop_url, access_token, plan_id):
+    print("creation of recurring charge ......")
+    shopify.Session.setup(api_key=os.environ.get('SHOPIFY_API_KEY'), secret=os.environ.get('SHOPIFY_API_SECRET'))
+    session = shopify.Session(shop_url, os.environ.get('SHOPIFY_API_VERSION'), access_token)
+    shopify.ShopifyResource.activate_session(session)
+    
+    print(os.environ.get('SHOPIFY_API_SCOPE'))      
+    
+    print('getting plan.....')
+    plan = SortingPlan.objects.get(plan_id=plan_id)
+    print(plan)
+    plan_name = plan.name
+    plan_price = float(plan.cost_month)
+
+    charge = shopify.RecurringApplicationCharge({
+        "name": plan_name,
+        "price": plan_price,
+        "trial_days": 14,
+        "return_url": "https://pearch.vercel.app",
+        "terms": "description"
+    })
+    
+    print("charge....", charge)
+    
+    if charge.save():
+        return charge.confirmation_url
+    else:
+        errors = charge.errors.full_messages()
+        print(f"Charge save failed with errors: {errors}")
+        raise Exception("Failed to create recurring charge.")
+
+
 
 # View to create a billing plan and redirect for confirmation
 @api_view(['GET'])
@@ -143,8 +146,8 @@ def create_billing_plan(request):
             print(shop_url, access_token, plan_id)
             print("billing url generation.......")
             billing_url = create_recurring_charge(shop_url, access_token, plan_id)
-            # return redirect(billing_url) #testing new method
-            return Response ({'billing_url':billing_url}, status=status.HTTP_200_OK)
+            return redirect(billing_url) #testing new method
+            # return Response ({'billing_url':billing_url}, status=status.HTTP_200_OK)
         except Client.DoesNotExist:
             return Response({'error': 'Client not found'}, status=status.HTTP_404_NOT_FOUND)
         except SortingPlan.DoesNotExist:
