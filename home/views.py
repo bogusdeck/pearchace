@@ -1472,7 +1472,7 @@ def applied_on_active_collection(request):
 
         data = request.data
         collection_ids = data.get("collection_ids", [])
-        algo_id = data.get("algo_id")
+        algo_id = data.get("clalgo_id")
 
         if not collection_ids or not algo_id:
             return Response({"error": "collection_ids and algo_id are required."}, status=status.HTTP_400_BAD_REQUEST)
@@ -1713,8 +1713,8 @@ def get_sorting_algorithms(request):  # Updated for new UI
                 "Promote High Inventory Products": "Promotes products with high inventory based on the number of days and percentile.",
                 "Bestsellers": "Promotes products based on sales, sorted from high to low or low to high sales volume",
                 "Promote High Variant Availability": "Promotes products with high variant availability based on a variant threshold.",
-                "I'm Feeling Lucky": "Randomly Choose Sorting to promote products.",
-                "RFM": "Promotes products based on Recency, Frequency, and Monetary value."
+                "I Am Feeling Lucky": "Randomly Choose Sorting to promote products.",
+                "RFM Sort": "Promotes products based on Recency, Frequency, and Monetary value."
             }
             return descriptions.get(algo_name, "Description not available.")
 
