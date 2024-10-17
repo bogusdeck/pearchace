@@ -103,7 +103,6 @@ DATABASES = {
     }
 }
 
-# user=postgres.byrimkvdcldivygfesjg password=[YOUR-PASSWORD] host=aws-0-ap-south-1.pooler.supabase.com port=6543 dbname=postgres
 # user= pearchuser , name=pearchdb , password = PearchTest@123 , host=db , port = 5432 
 
 MONGODB_SETTINGS = {
