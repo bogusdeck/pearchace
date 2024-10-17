@@ -45,7 +45,6 @@ def activate_recurring_charge(shop_url, access_token, charge_id):
     
     if charge.status == 'accepted':
         charge.activate()
-        # Update the subscription in the local database
         subscription = Subscription.objects.get(shop_id=shop_url)
         subscription.status = 'active'
         subscription.current_period_end = timezone.now() + timezone.timedelta(days=30)  # Assuming 30-day billing cycle
@@ -75,6 +74,68 @@ def cancel_active_recurring_charges(shop_url, access_token):
         subscription.cancelled_at = timezone.now()
         subscription.save()
 
+def create_one_time_charge(shop_url, access_token, charge_name, charge_price, return_url):
+    # Initialize a Shopify session
+    shopify.Session.setup(api_key=os.environ.get('SHOPIFY_API_KEY'), secret=os.environ.get('SHOPIFY_API_SECRET'))
+    session = shopify.Session(shop_url, os.environ.get('SHOPIFY_API_VERSION'), access_token)
+    shopify.ShopifyResource.activate_session(session)
+    
+    charge = shopify.ApplicationCharge({
+        "name": charge_name,
+        "price": charge_price,
+        "return_url": return_url,
+        "test": True  
+    })
+    
+    if charge.save():
+        return charge.confirmation_url
+    else:
+        errors = charge.errors.full_messages()
+        print(f"One-time charge save failed with errors: {errors}")
+        raise Exception("Failed to create one-time charge.")
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def purchase_additional_sorts(request):
+    auth_header = request.headers.get('Authorization', None)
+    if auth_header is None:
+        return Response({'error': 'Authorization header missing'}, status=status.HTTP_401_UNAUTHORIZED)
+    
+    try:
+        token = auth_header.split(' ')[1]
+        jwt_auth = JWTAuthentication()
+
+        validated_token = jwt_auth.get_validated_token(token)
+        user = jwt_auth.get_user(validated_token)
+
+        shop_url = user.shop_url
+        shop_id = user.shop_id
+
+        if not shop_url:
+            return Response({'error': 'Shop url not found'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            client = Client.objects.get(shop_id=shop_id)
+            access_token = client.access_token
+            additional_sorts = request.data.get('sorts', 100)  
+            charge_name = f"Purchase {additional_sorts} Additional Sorts"
+            charge_price = 5.00  
+
+            return_url = "https://devbackend.pearchace.com/api/billing/confirm/"  
+
+            billing_url = create_one_time_charge(shop_url, access_token, charge_name, charge_price, return_url)
+            return redirect(billing_url)  
+
+        except Client.DoesNotExist:
+            return Response({'error': 'Client not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+    except InvalidToken:
+        return Response({'error': 'Invalid token'}, status=status.HTTP_401_UNAUTHORIZED)
+    except Exception as e:
+        return Response({'error': str(e)}, status=400)
+
+
+
 # Shopify Billing Logic
 def create_recurring_charge(shop_url, access_token, plan_id):
     print("creation of recurring charge ......")
@@ -94,7 +155,7 @@ def create_recurring_charge(shop_url, access_token, plan_id):
         "name": plan_name,
         "price": plan_price,
         "trial_days": 14,
-        "return_url": "https://pearch.vercel.app",
+        "return_url": "https://devbackend.pearchace.com/api/billing/confirm/",
         "terms": "description"
     })
     
