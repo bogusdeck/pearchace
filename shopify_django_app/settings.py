@@ -11,7 +11,7 @@ SECRET_KEY = os.environ.get('DJANGO_SECRET')
 
 DEBUG = True
 
-ALLOWED_HOSTS = ['pearchace.onrender.com', 'localhost', '127.0.0.1', '.vercel.app', '3.108.104.68','pearchace.up.railway.app', 'ec2-3-108-104-68.ap-south-1.compute.amazonaws.com', '.ngrok-free.app','devbackend.pearchace.com']
+ALLOWED_HOSTS = ['pearchace.onrender.com', 'localhost', '127.0.0.1', '.vercel.app', '3.108.104.68','pearchace.up.railway.app', 'ec2-3-108-104-68.ap-south-1.compute.amazonaws.com', '.ngrok-free.app','devbackend.pearchace.com','0.0.0.0:8000']
 
 
 INSTALLED_APPS = [
@@ -50,7 +50,8 @@ CORS_ALLOWED_ORIGINS = [
     'http://3.108.104.68:80',
     'https://pearch.vercel.app',
     'http://localhost:80',
-    'https://b175-49-249-156-158.ngrok-free.app'
+    'https://b175-49-249-156-158.ngrok-free.app',
+    'https://frontend.pearchace.com'
 ]
 
 CORS_ALLOW_CREDENTIALS = True
