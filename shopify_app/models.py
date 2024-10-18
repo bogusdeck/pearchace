@@ -199,7 +199,7 @@ class SortingPlan(models.Model):
     def __str__(self):
         return self.name
 
-    
+
 #done
 class Subscription(models.Model):
     subscription_id = models.AutoField(primary_key=True)

@@ -117,14 +117,15 @@ def purchase_additional_sorts(request):
         try:
             client = Client.objects.get(shop_id=shop_id)
             access_token = client.access_token
-            additional_sorts = request.data.get('sorts', 100)  
+            additional_sorts = request.GET.get('sorts', 100)  
             charge_name = f"Purchase {additional_sorts} Additional Sorts"
             charge_price = 5.00  
 
-            return_url = "https://devbackend.pearchace.com/api/billing/confirm/"  
-
+            url = os.environ.get('BACKEND_URL')
+            return_url = f"{url}/api/billing/confirm/"  
+            
             billing_url = create_one_time_charge(shop_url, access_token, charge_name, charge_price, return_url)
-            return redirect(billing_url)  
+            return billing_url 
 
         except Client.DoesNotExist:
             return Response({'error': 'Client not found'}, status=status.HTTP_404_NOT_FOUND)
@@ -134,29 +135,33 @@ def purchase_additional_sorts(request):
     except Exception as e:
         return Response({'error': str(e)}, status=400)
 
-
-
-# Shopify Billing Logic
-def create_recurring_charge(shop_url, access_token, plan_id):
+# SHOPIFY 
+def create_recurring_charge(shop_url, access_token, plan_id, is_annual):
     print("creation of recurring charge ......")
+    
+    # Shopify session setup
     shopify.Session.setup(api_key=os.environ.get('SHOPIFY_API_KEY'), secret=os.environ.get('SHOPIFY_API_SECRET'))
     session = shopify.Session(shop_url, os.environ.get('SHOPIFY_API_VERSION'), access_token)
     shopify.ShopifyResource.activate_session(session)
     
-    print(os.environ.get('SHOPIFY_API_SCOPE'))      
-    
+    # Fetch the plan details
     print('getting plan.....')
     plan = SortingPlan.objects.get(plan_id=plan_id)
     print(plan)
+    
     plan_name = plan.name
-    plan_price = float(plan.cost_month)
+    # Determine the price based on whether the subscription is annual or monthly
+    plan_price = float(plan.cost_annual) if is_annual else float(plan.cost_month)
+    print(f"Billing plan: {plan_name}, Price: {plan_price}")
+    
+    url = os.environ.get('BACKEND_URL')
 
     charge = shopify.RecurringApplicationCharge({
         "name": plan_name,
         "price": plan_price,
         "trial_days": 14,
-        "return_url": "https://devbackend.pearchace.com/api/billing/confirm/",
-        "terms": "description"
+        "return_url": f"{url}/api/billing/confirm/",
+        "terms": f"{plan_name} subscription with {'annual' if is_annual else 'monthly'} billing"
     })
     
     print("charge....", charge)
@@ -169,9 +174,8 @@ def create_recurring_charge(shop_url, access_token, plan_id):
         raise Exception("Failed to create recurring charge.")
 
 
-
 # View to create a billing plan and redirect for confirmation
-@api_view(['GET'])
+@api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def create_billing_plan(request):
     auth_header = request.headers.get('Authorization', None)
@@ -194,7 +198,13 @@ def create_billing_plan(request):
             return Response({'error': 'Shop url not found in session'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            plan_id = request.GET.get('plan_id')
+            plan_id = request.data.get('plan_id')
+            is_annual = request.data.get('is_annual', 'false')
+            if isinstance(is_annual, bool):
+                is_annual = is_annual  
+            else:
+                is_annual = str(is_annual).lower() == 'true'
+            
             client = Client.objects.get(shop_id=shop_id)
             if not plan_id:
                 return JsonResponse({'error': 'Plan ID is missing'}, status=400)
@@ -205,10 +215,12 @@ def create_billing_plan(request):
                 return JsonResponse({'error': 'Shop id or access token is missing'}, status=400)
             
             print(shop_url, access_token, plan_id)
-            print("billing url generation.......")
-            billing_url = create_recurring_charge(shop_url, access_token, plan_id)
-            return redirect(billing_url) #testing new method
-            # return Response ({'billing_url':billing_url}, status=status.HTTP_200_OK)
+            print(f"Billing URL generation for {'annual' if is_annual else 'monthly'} plan.......")
+            billing_url = create_recurring_charge(shop_url, access_token, plan_id, is_annual)
+            
+            print(billing_url)
+            return redirect(billing_url)  # Redirect to the generated billing URL
+            
         except Client.DoesNotExist:
             return Response({'error': 'Client not found'}, status=status.HTTP_404_NOT_FOUND)
         except SortingPlan.DoesNotExist:
@@ -218,6 +230,7 @@ def create_billing_plan(request):
         return Response({'error': 'Invalid token'}, status=status.HTTP_401_UNAUTHORIZED)
     except Exception as e:
         return Response({'error': str(e)}, status=400)
+
 
 
 # View to handle billing confirmation
