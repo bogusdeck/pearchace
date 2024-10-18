@@ -11,8 +11,8 @@ SECRET_KEY = os.environ.get('DJANGO_SECRET')
 
 DEBUG = True
 
-ALLOWED_HOSTS = ['pearchace.onrender.com', 'localhost', '127.0.0.1', '.vercel.app', '3.108.104.68','pearchace.up.railway.app', 'ec2-3-108-104-68.ap-south-1.compute.amazonaws.com', '.ngrok-free.app','devbackend.pearchace.com']
-
+# ALLOWED_HOSTS = ['pearchace.onrender.com', 'localhost', '127.0.0.1', '.vercel.app', '3.108.104.68','pearchace.up.railway.app', 'ec2-3-108-104-68.ap-south-1.compute.amazonaws.com', '.ngrok-free.app','devbackend.pearchace.com']
+ALLOWED_HOSTS = ['*']
 
 INSTALLED_APPS = [
     'django.contrib.admin',

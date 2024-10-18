@@ -1,7 +1,7 @@
 django
 Shopifyapi
 python-dotenv
-psycopg2
+psycopg2-binary
 aiohttp
 pytz
 django-timezone-field
@@ -9,7 +9,6 @@ djangorestframework
 requests
 whitenoise
 gunicorn
-psycopg2
 django-cors-headers
 djangorestframework-simplejwt
 python-dateutil
