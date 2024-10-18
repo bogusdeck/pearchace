@@ -87,6 +87,6 @@ local_settings.py
 
 .env
 db.sqlite3
-.venv
+.venv/
 shopify_django_app/settings.py
 settings.py
