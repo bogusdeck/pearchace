@@ -181,56 +181,58 @@ def create_billing_plan(request):
     auth_header = request.headers.get('Authorization', None)
     if auth_header is None:
         return Response({'error': 'Authorization header missing'}, status=status.HTTP_401_UNAUTHORIZED)
-    
+
     try:
         token = auth_header.split(' ')[1]
         jwt_auth = JWTAuthentication()
-
         validated_token = jwt_auth.get_validated_token(token)
         user = jwt_auth.get_user(validated_token)
         
-        print("billing plan creating......")
-        
+        print("Billing plan creating...")
+
         shop_url = user.shop_url
         shop_id = user.shop_id
 
         if not shop_url:
-            return Response({'error': 'Shop url not found in session'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'Shop URL not found in session'}, status=status.HTTP_400_BAD_REQUEST)
+
+        plan_id = request.data.get('plan_id')
+        is_annual = request.data.get('is_annual')
+
+        if plan_id is None:
+            return Response({'error': 'Plan ID is missing'}, status=status.HTTP_400_BAD_REQUEST)
+        if not isinstance(plan_id, (int, float)):  # Ensure plan_id is a number (int or float)
+            return Response({'error': 'Plan ID must be a number'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if is_annual is None:
+            return Response({'error': 'is_annual is required'}, status=status.HTTP_400_BAD_REQUEST)
+        if not isinstance(is_annual, bool):  # Ensure is_annual is a boolean
+            return Response({'error': 'is_annual must be a boolean'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            plan_id = request.data.get('plan_id')
-            is_annual = request.data.get('is_annual', 'false')
-            if isinstance(is_annual, bool):
-                is_annual = is_annual  
-            else:
-                is_annual = str(is_annual).lower() == 'true'
-            
             client = Client.objects.get(shop_id=shop_id)
-            if not plan_id:
-                return JsonResponse({'error': 'Plan ID is missing'}, status=400)
-
-            access_token = client.access_token
-
-            if not shop_id or not access_token:
-                return JsonResponse({'error': 'Shop id or access token is missing'}, status=400)
-            
-            print(shop_url, access_token, plan_id)
-            print(f"Billing URL generation for {'annual' if is_annual else 'monthly'} plan.......")
-            billing_url = create_recurring_charge(shop_url, access_token, plan_id, is_annual)
-            
-            print(billing_url)
-            return redirect(billing_url)  # Redirect to the generated billing URL
-            
         except Client.DoesNotExist:
             return Response({'error': 'Client not found'}, status=status.HTTP_404_NOT_FOUND)
-        except SortingPlan.DoesNotExist:
-            return Response({'error': 'Plan not found'}, status=404)
+
+        access_token = client.access_token
+
+        if not access_token:
+            return Response({'error': 'Access token is missing'}, status=status.HTTP_400_BAD_REQUEST)
         
+        print(f"Shop URL: {shop_url}, Access Token: {access_token}, Plan ID: {plan_id}")
+        print(f"Billing URL generation for {'annual' if is_annual else 'monthly'} plan...")
+
+        billing_url = create_recurring_charge(shop_url, access_token, plan_id, is_annual)
+        
+        print(billing_url)
+        # return billing_url
+        return JsonResponse({'billing_url': billing_url}, status=status.HTTP_200_OK)
+
     except InvalidToken:
         return Response({'error': 'Invalid token'}, status=status.HTTP_401_UNAUTHORIZED)
     except Exception as e:
-        return Response({'error': str(e)}, status=400)
-
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    
 
 
 # View to handle billing confirmation

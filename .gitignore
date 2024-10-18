@@ -89,3 +89,4 @@ local_settings.py
 db.sqlite3
 .venv
 shopify_django_app/settings.py
+settings.py

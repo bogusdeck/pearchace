@@ -50,7 +50,8 @@ CORS_ALLOWED_ORIGINS = [
     'http://3.108.104.68:80',
     'https://pearch.vercel.app',
     'http://localhost:80',
-    'https://b175-49-249-156-158.ngrok-free.app'
+    'https://b175-49-249-156-158.ngrok-free.app',
+    'https://frontend.pearchace.com'
 ]
 
 CORS_ALLOW_CREDENTIALS = True
@@ -97,13 +98,12 @@ DATABASES = {
         'PASSWORD': os.getenv('DB_PASSWORD', ''),
         'HOST': os.getenv('DB_HOST', 'localhost'),
         'PORT': os.getenv('DB_PORT', '5432'),
-        # 'OPTIONS': {
-        #     'sslmode': os.getenv('DB_SSLMODE', 'require'),
-        # },
+        'OPTIONS': {
+            'sslmode': os.getenv('DB_SSLMODE', 'require'),
+        },
     }
 }
 
-# user=postgres.byrimkvdcldivygfesjg password=[YOUR-PASSWORD] host=aws-0-ap-south-1.pooler.supabase.com port=6543 dbname=postgres
 # user= pearchuser , name=pearchdb , password = PearchTest@123 , host=db , port = 5432 
 
 MONGODB_SETTINGS = {
