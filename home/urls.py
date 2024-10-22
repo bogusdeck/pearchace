@@ -1,6 +1,6 @@
 from django.urls import path
 from . import views
-from .billing import create_billing_plan, confirm_billing, handle_app_uninstall
+from .billing import create_billing_plan, confirm_billing, handle_app_uninstall, purchase_additional_sorts , extra_sort_confirm
 
 urlpatterns = [
     # header 
@@ -33,6 +33,8 @@ urlpatterns = [
     # path('api/billing/confirm/', billing_confirmation, name='billing_confirmation'),  
     path('api/billing/create/', create_billing_plan, name='create_billing_plan'),
     path('api/billing/confirm/', confirm_billing, name='confirm_billing'),
+    path('api/billing/addon-sorts/', purchase_additional_sorts, name='additional_sorts'),
+    path('api/billing/extra-sort-confirm/', extra_sort_confirm, name='extra_sorts_confirm'),
     path('api/billing/uninstall/', handle_app_uninstall, name='handle_app_uninstall'),   
 
     # new apis
