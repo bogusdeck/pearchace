@@ -50,9 +50,9 @@ CORS_ALLOWED_ORIGINS = [
     'http://3.108.104.68:80',
     'http://localhost:80',
     'https://frontend.pearchace.com',
-    '143.244.131.36:3000',
-    '143.244.131.36:3001',
-    '143.244.131.36:3002',
+    'https://143.244.131.36:3000',
+    'https://143.244.131.36:3001',
+    'https://143.244.131.36:3002',
 ]
 
 CORS_ALLOW_CREDENTIALS = True
@@ -184,8 +184,8 @@ REST_FRAMEWORK = {
 from datetime import timedelta
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(days=28),  
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=28),  
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=15),  
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=15),  
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
 }
