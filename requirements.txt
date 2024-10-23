@@ -18,3 +18,5 @@ redis
 boto3
 django-storages
 django-celery-beat
+flower
+django-celery-results

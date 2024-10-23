@@ -852,9 +852,7 @@ def update_product_order(request):
         return Response({"errore": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-
 ################################  COLLECTION SETTING #######################################
-
 @api_view(["GET"])
 @permission_classes([IsAuthenticated]) # last sort date for that collection
 def fetch_last_sort_date(request):  # working and tested
@@ -1177,7 +1175,6 @@ def preview_products(request):
 
 
 ############################### SORTING SETTINGS ###########################################
-
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def post_quick_config(request):

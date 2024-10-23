@@ -200,22 +200,19 @@ class SortingPlan(models.Model):
         return self.name
 
 
-#done
+# Subscription Model
 class Subscription(models.Model):
     subscription_id = models.AutoField(primary_key=True)
     shop_id = models.CharField(max_length=255)  
     plan = models.ForeignKey(SortingPlan, on_delete=models.CASCADE)
-    status = models.CharField(max_length=50)
-    current_period_start = models.DateTimeField()
-    current_period_end = models.DateTimeField()
+    status = models.CharField(max_length=50)  
+    current_period_start = models.DateTimeField(null=True, blank=True)
+    current_period_end = models.DateTimeField(null=True, blank=True)
     next_billing_date = models.DateTimeField(null=True, blank=True)
-    trial_start_date = models.DateTimeField(null=True, blank=True)
-    trial_end_date = models.DateTimeField(null=True, blank=True)
-    cancelled_at = models.DateTimeField(null=True, blank=True)
-    ended_at = models.DateTimeField(null=True, blank=True)
-    is_on_trial = models.BooleanField(default=False)
+    charge_id = models.CharField(max_length=255, null=True, blank=True)  
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         unique_together = ('shop_id', 'subscription_id')  
@@ -223,7 +220,7 @@ class Subscription(models.Model):
     def __str__(self):
         return f"Subscription {self.subscription_id} for shop_id {self.shop_id}"
 
-#done
+# Usage Model
 class Usage(models.Model):
     usage_id = models.AutoField(primary_key=True)
     shop_id = models.CharField(max_length=255)  
@@ -231,9 +228,8 @@ class Usage(models.Model):
     sorts_count = models.IntegerField(default=0)
     orders_count = models.IntegerField(default=0)
     addon_sorts_count = models.IntegerField(default=0)
+    charge_id = models.CharField(max_length=255, null=True, blank=True)
     usage_date = models.DateField()
-    additional_sorts_purchased = models.IntegerField(default=0)
-    additional_sorts_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -265,3 +261,24 @@ class ClientGraph(models.Model):
     def __str__(self):
         return f"Graph for {self.client.shop_id} on {self.date}"
 
+
+
+class BillingTokens(models.Model):
+    TOKEN_STATUS_CHOICES = [
+        ('active', 'Active'),
+        ('expired', 'Expired'),
+    ]   
+
+    shop_id = models.CharField(max_length=255, unique=True)
+    shop_url = models.CharField(max_length=255)  
+    temp_token = models.CharField(max_length=255, unique=True)  
+    status = models.CharField(max_length=10, choices=TOKEN_STATUS_CHOICES, default='active')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    expiration_time = models.DateTimeField()
+
+    def __str__(self):
+        return f"{self.shop_id} - {self.temp_token} ({self.status})"
+
+    def is_expired(self):
+        return timezone.now() > self.expiration_time

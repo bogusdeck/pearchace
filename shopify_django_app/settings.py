@@ -9,10 +9,9 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 SECRET_KEY = os.environ.get('DJANGO_SECRET')
 
-DEBUG = True
 
-# ALLOWED_HOSTS = ['pearchace.onrender.com', 'localhost', '127.0.0.1', '.vercel.app', '3.108.104.68','pearchace.up.railway.app', 'ec2-3-108-104-68.ap-south-1.compute.amazonaws.com', '.ngrok-free.app','devbackend.pearchace.com']
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'ec2-3-108-104-68.ap-south-1.compute.amazonaws.com','devbackend.pearchace.com','0.0.0.0:8000']
+
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -27,11 +26,13 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt',
     'corsheaders',
     'django_celery_beat',
+    'django_celery_results'
 ]
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    # 'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -39,7 +40,6 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'shopify_app.middleware.LoginProtection',
-    'whitenoise.middleware.WhiteNoiseMiddleware'
 ]
 
 ROOT_URLCONF = 'shopify_django_app.urls'
@@ -69,6 +69,13 @@ CORS_ALLOW_HEADERS = [
     'authorization',
     'content-type',
 ]
+
+# settings.py
+
+CSRF_TRUSTED_ORIGINS = [
+    'https://devbackend.pearchace.com',
+]
+
 
 TEMPLATES = [
     {
@@ -128,13 +135,19 @@ AUTH_PASSWORD_VALIDATORS = [
 
 #celery settings 
 CELERY_BROKER_URL = 'redis://redis:6379/0'
-CELERY_RESULT_BACKEND = 'redis://redis:6379/0'
+# CELERY_RESULT_BACKEND = 'redis://redis:6379/0'
+CELERY_RESULT_BACKEND = 'django-db'
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'UTC'
-
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers.DatabaseScheduler'
+
+CELERY_RESULT_BACKEND = 'django-db'
+CELERY_CACHE_BACKEND = 'django-cache'
+
+######## for mroe security #####################
+X_FRAME_OPTIONS = 'DENY'
 
 AUTH_USER_MODEL = 'shopify_app.Client'
 
@@ -151,8 +164,8 @@ USE_TZ = True
 SHOPIFY_API_KEY = os.environ.get('SHOPIFY_API_KEY')
 SHOPIFY_API_SECRET = os.environ.get('SHOPIFY_API_SECRET')
 
-STATIC_URL = '/static/'
-STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+# STATIC_URL = '/static/'
+# STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
@@ -167,36 +180,6 @@ REST_FRAMEWORK = {
     ),
 }
 
-# REST_FRAMEWORK = {
-#     'DEFAULT_AUTHENTICATION_CLASSES': (
-#         'rest_framework_jwt.authentication.JSONWebTokenAuthentication',
-#         'rest_framework.authentication.SessionAuthentication',
-#         'rest_framework.authentication.BasicAuthentication',
-#     ),
-# }
-
-# import datetime
-# JWT_AUTH = {
-#     'JWT_EXPIRATION_DELTA': datetime.timedelta(days=7),  # Set token expiry
-#     'JWT_ALLOW_REFRESH': True,
-#     'JWT_REFRESH_EXPIRATION_DELTA': datetime.timedelta(days=14),
-#     'JWT_RESPONSE_PAYLOAD_HANDLER': 'your_project.utils.jwt_response_payload_handler',  # Custom response handler
-# }
-
-# from datetime import timedelta
-# from rest_framework_simplejwt.settings import api_settings
-
-# SIMPLE_JWT = {
-#     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=5),
-#     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
-#     'ROTATE_REFRESH_TOKENS': False,
-#     'BLACKLIST_AFTER_ROTATION': True,
-#     'ALGORITHM': 'HS256',
-#     'SIGNING_KEY': SECRET_KEY,
-#     'VERIFYING_KEY': None,
-#     'AUTH_HEADER_TYPES': ('Bearer',),
-# }
-
 from datetime import timedelta
 
 SIMPLE_JWT = {
@@ -207,42 +190,46 @@ SIMPLE_JWT = {
 }
 
 
+import os
+import logging
 
-# LOGGING = {
-#     'version': 1,
-#     'disable_existing_loggers': False,
-#     'formatters': {
-#         'verbose': {
-#             'format': '{levelname} {asctime} {module} {message}',
-#             'style': '{',
-#         },
-#         'simple': {
-#             'format': '{levelname} {message}',
-#             'style': '{',
-#         },
-#     },
-#     'handlers': {
-#         'file': {
-#             'level': 'DEBUG',
-#             'class': 'logging.FileHandler',
-#             'filename': os.path.join(BASE_DIR, 'django_debug.log'),  
-#             'formatter': 'verbose',
-#         },
-#         'console': {
-#             'class': 'logging.StreamHandler',
-#             'formatter': 'simple',
-#         },
-#     },
-#     'loggers': {
-#         'django': {
-#             'handlers': ['file', 'console'],
-#             'level': 'DEBUG',
-#             'propagate': True,
-#         },
-#         'myapp': {  # You can customize this for your app
-#             'handlers': ['file', 'console'],
-#             'level': 'DEBUG',
-#             'propagate': True,
-#         },
-#     },
-# }
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
+    },
+    'loggers': {
+        'django': {
+            'level': 'INFO',  # Change to DEBUG if you want more Django logs
+            'handlers': ['console'],
+            'propagate': True,
+        },
+        'shopify_django_app': {  # Replace with the name of your app
+            'level': 'DEBUG',  # Ensure it's set to DEBUG to capture debug logs
+            'handlers': ['console'],
+            'propagate': False,
+        },
+        'shopify_app': {  # Assuming you want to use this name for your logs
+            'level': 'DEBUG',
+            'handlers': ['console'],
+            'propagate': False,
+        },
+    },
+}
+
+# Optionally, set the root logger level if needed
+logging.getLogger().setLevel(logging.INFO)
