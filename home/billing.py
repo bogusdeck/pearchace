@@ -530,7 +530,6 @@ def extra_sort_confirm(request):
             # Update addon_sorts_count in Usage
             usage = Usage.objects.filter(shop_id=shop_id, subscription=subscription).first()
             if not usage:
-                # Create a new usage entry if not found for the current period
                 usage = Usage.objects.create(
                     shop_id=shop_id,
                     subscription=subscription,
@@ -538,7 +537,6 @@ def extra_sort_confirm(request):
                     addon_sorts_count=additional_sorts
                 )
             else:
-                # Add additional sorts to the existing usage
                 usage.addon_sorts_count += additional_sorts
                 usage.save()
 
