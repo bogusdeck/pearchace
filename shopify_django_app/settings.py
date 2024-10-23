@@ -44,7 +44,7 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'shopify_django_app.urls'
 
-CORS_ALLOW_ALL_ORIGINS = False
+CORS_ALLOW_ALL_ORIGINS = os.environ.get('CORS_ALLOW_ALL_ORIGINS', 'True') == 'True'
  
 CORS_ALLOWED_ORIGINS = [
     'http://3.108.104.68:80',
