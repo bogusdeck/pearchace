@@ -224,7 +224,7 @@ def available_sorts(request):
 
         try:
             client = Client.objects.get(shop_url=shop_url)
-            usage = Usage.objects.get(client=client)
+            usage = Usage.objects.get(shop_id=client.shop_id)
             subscription = Subscription.objects.get(id=usage.subscription_id)
             sorting_plan = SortingPlan.objects.get(id=subscription.plan_id)
 
