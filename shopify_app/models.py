@@ -229,16 +229,14 @@ class Usage(models.Model):
     orders_count = models.IntegerField(default=0)
     addon_sorts_count = models.IntegerField(default=0)
     charge_id = models.CharField(max_length=255, null=True, blank=True)
-    usage_date = models.DateField()
+    usage_date = models.DateField(null=True, default=timezone.now)
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
-
     class Meta:
         unique_together = ('shop_id', 'usage_id') 
-
     def __str__(self):
         return f"Usage {self.usage_id} for shop_id {self.shop_id} on {self.usage_date}"
-    
+        
 #done not dealing with it much 
 class PlanHistory(models.Model):
     id = models.AutoField(primary_key=True)
@@ -267,12 +265,13 @@ class BillingTokens(models.Model):
     TOKEN_STATUS_CHOICES = [
         ('active', 'Active'),
         ('expired', 'Expired'),
-    ]   
+    ]
 
     shop_id = models.CharField(max_length=255, unique=True)
     shop_url = models.CharField(max_length=255)  
     temp_token = models.CharField(max_length=255, unique=True)  
     status = models.CharField(max_length=10, choices=TOKEN_STATUS_CHOICES, default='active')
+    charge_id = models.CharField(max_length=255, null=True, blank=True)  # New field for charge_id
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     expiration_time = models.DateTimeField()

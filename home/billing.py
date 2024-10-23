@@ -99,45 +99,41 @@ def activate_recurring_charge(shop_url, shop_id, access_token, charge_id):
         logger.debug(f"RecurringApplicationCharge found: {charge}")
 
         if charge.status == 'accepted':
-            # Activate the charge if it's accepted
             charge.activate()
             logger.debug(f"Charge {charge_id} activated successfully.")
-
         elif charge.status == 'active':
             logger.debug(f"Charge {charge_id} is already active. No action needed.")
-
         else:
             logger.error(f"Charge {charge_id} status is not accepted or active. Status: {charge.status}")
             return False
 
-        # Now handle the subscription logic, regardless of whether we activated the charge or not
         try:
             subscription = Subscription.objects.get(shop_id=shop_id)
             logger.debug(f"Subscription found for shop_id {shop_id}")
 
-            # Update the subscription fields
             subscription.status = 'active'
             subscription.current_period_start = timezone.now()
             subscription.current_period_end = subscription.current_period_start + timezone.timedelta(days=30)
             subscription.next_billing_date = subscription.current_period_end
+            subscription.charge_id = charge_id  
             subscription.updated_at = timezone.now()
             subscription.save()
             logger.debug(f"Subscription for shop_id {shop_id} updated successfully.")
 
         except Subscription.DoesNotExist:
-            # If the subscription does not exist, fetch the plan and create a new subscription
             logger.debug(f"No subscription found for shop_id {shop_id}, creating a new subscription.")
             try:
                 plan = SortingPlan.objects.get(name=charge.name)
                 logger.debug(f"Plan found: {plan.name}, creating subscription for shop_id {shop_id}.")
 
-                Subscription.objects.create(
+                subscription = Subscription.objects.create(
                     shop_id=shop_id,
                     plan=plan,
                     status='active',
                     current_period_start=timezone.now(),
                     current_period_end=timezone.now() + timezone.timedelta(days=30),
                     next_billing_date=timezone.now() + timezone.timedelta(days=30),
+                    charge_id=charge_id,  
                 )
                 logger.debug(f"New subscription created successfully for shop_id {shop_id}.")
 
@@ -148,11 +144,36 @@ def activate_recurring_charge(shop_url, shop_id, access_token, charge_id):
                 logger.exception(f"Error while creating subscription for shop_id {shop_id}: {e}")
                 return False
 
+        
+        try:
+            usage, created = Usage.objects.get_or_create(
+                shop_id=shop_id,
+                subscription=subscription,
+                usage_date=timezone.now(),  
+                defaults={
+                    'sorts_count': 0,
+                    'addon_sorts_count': 0,
+                    'charge_id': charge_id,
+                }
+            )
+
+            if created:
+                logger.debug(f"New usage created for shop_id {shop_id} with usage_date set to now.")
+            else:
+                usage.updated_at = timezone.now()
+                usage.save()
+                logger.debug(f"Usage for shop_id {shop_id} updated (only updated_at changed).")
+
+        except Exception as e:
+            logger.exception(f"Error while updating/creating usage for shop_id {shop_id}: {e}")
+            return False
+
         return True
 
     except Exception as e:
         logger.exception(f"Error occurred while activating recurring charge for shop_id {shop_id} with charge_id {charge_id}: {e}")
         return False
+
 
 
 def cancel_active_recurring_charges(shop_url, access_token):
@@ -163,11 +184,9 @@ def cancel_active_recurring_charges(shop_url, access_token):
     logger.debug(f"Fetching all recurring application charges for shop_url: {shop_url}")
 
     try:
-        # Fetch all recurring charges
         all_charges = shopify.RecurringApplicationCharge.find()
         logger.debug(f"Total charges found: {len(all_charges)}")
         
-        # Filter active charges
         active_charges = [charge for charge in all_charges if charge.status == 'active']
         
         if not active_charges:
@@ -177,7 +196,6 @@ def cancel_active_recurring_charges(shop_url, access_token):
                 charge.cancel()
                 logger.info(f"Canceled charge with ID {charge.id} for shop_url: {shop_url}")
 
-        # Update the subscription status in your models
         client = Client.objects.get(shop_url=shop_url)
         shop_id = client.shop_id
 
@@ -188,7 +206,6 @@ def cancel_active_recurring_charges(shop_url, access_token):
             subscription.save()
             logger.info(f"Subscription for shop_id {shop_id} cancelled.")
 
-        # Optionally delete the BillingTokens for the shop
         BillingTokens.objects.filter(shop_id=shop_id).delete()
         logger.info(f"Deleted all BillingTokens for shop_id {shop_id}.")
 
@@ -223,7 +240,6 @@ def create_recurring_charge(shop_url, access_token, plan_id, is_annual, shop_id)
     
     url = os.environ.get('BACKEND_URL')
 
-    # Generate and store the temporary token
     temp_token = generate_temp_token()
     store_temp_token(shop_url ,shop_id , temp_token)  
 
@@ -231,7 +247,7 @@ def create_recurring_charge(shop_url, access_token, plan_id, is_annual, shop_id)
         "name": plan_name,
         "price": plan_price,
         "trial_days": 14,
-        # "test": True,
+        "test": True,
         "return_url": f"{url}/api/billing/confirm/?temp_token={temp_token}",
         "terms": f"{plan_name} subscription with {'annual' if is_annual else 'monthly'} billing"
     })
@@ -336,6 +352,7 @@ def confirm_billing(request):
             success = activate_recurring_charge(shop_url, shop_id, access_token, charge_id)
             if success:
                 billing_token.status = 'expired'
+                billing_token.charge_id = charge_id
                 billing_token.save()
                 
                 client.member = True
@@ -416,6 +433,7 @@ def create_one_time_charge(shop_url, access_token, charge_name, charge_price, re
         "name": charge_name,
         "price": charge_price,
         "return_url": return_url,
+        "test": True,
     })
     
     if charge.save():
