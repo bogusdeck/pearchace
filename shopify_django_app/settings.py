@@ -10,7 +10,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SECRET_KEY = os.environ.get('DJANGO_SECRET')
 
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'ec2-3-108-104-68.ap-south-1.compute.amazonaws.com','devbackend.pearchace.com','0.0.0.0:8000']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'ec2-3-108-104-68.ap-south-1.compute.amazonaws.com','devbackend.pearchace.com','0.0.0.0:8000','3.108.104.68']
 
 
 INSTALLED_APPS = [
@@ -44,14 +44,13 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'shopify_django_app.urls'
 
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_ALL_ORIGINS = False
  
 CORS_ALLOWED_ORIGINS = [
     'http://3.108.104.68:80',
-    'https://pearch.vercel.app',
     'http://localhost:80',
-    'https://b175-49-249-156-158.ngrok-free.app',
-    'https://frontend.pearchace.com'
+    'https://frontend.pearchace.com',
+    '143.244.131.36:3000'
 ]
 
 CORS_ALLOW_CREDENTIALS = True
