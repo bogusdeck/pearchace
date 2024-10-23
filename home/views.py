@@ -225,17 +225,17 @@ def available_sorts(request):
         try:
             client = Client.objects.get(shop_url=shop_url)
             usage = Usage.objects.get(shop_id=client.shop_id)
-            subscription = Subscription.objects.get(id=usage.subscription_id)
-            sorting_plan = SortingPlan.objects.get(id=subscription.plan_id)
+            subscription = Subscription.objects.get(subscription_id=usage.subscription_id)
+            sorting_plan = SortingPlan.objects.get(plan_id=subscription.plan_id)
 
             sort_limit = sorting_plan.sort_limit
-            available_sorts = sort_limit - usage.sort_count
+            available_sorts = sort_limit - usage.sorts_count
 
             return Response(
                 {
                     "available_sorts": available_sorts,
-                    "sort_limit": sort_limit,
-                    "used_sorts": usage.sort_count,
+                    "total_sorts": sort_limit,
+                    "used_sorts": usage.sorts_count,
                 },
                 status=status.HTTP_200_OK,
             )
@@ -1886,8 +1886,8 @@ import json
 from shopify_app.tasks import sort_active_collections
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated]) 
-def update_global_settings(request):
+@permission_classes([IsAuthenticated])
+def update_global_settings(request):    
     try:
         logger.info("API hit: update_global_settings")
         data = request.data
@@ -1909,7 +1909,8 @@ def update_global_settings(request):
 
         client = Client.objects.get(shop_id=shop_id)
 
-        if "schedule_frequency" in data:
+        # Schedule frequency update
+        if "schedule_frequency" in data and data["schedule_frequency"].strip():
             # Clear existing schedule tasks for this client
             PeriodicTask.objects.filter(name__startswith=f"sort_collections_{client.shop_id}").delete()
 
@@ -1920,7 +1921,7 @@ def update_global_settings(request):
             if data["schedule_frequency"] == "hourly":
                 interval_schedule, _ = IntervalSchedule.objects.get_or_create(every=1, period=IntervalSchedule.HOURS)
                 PeriodicTask.objects.create(
-                    interval=interval_schedule,  
+                    interval=interval_schedule,
                     name=f"sort_collections_{client.shop_id}_hourly",
                     task="shopify_app.tasks.sort_active_collections",
                     args=json.dumps([client.id])
@@ -1929,7 +1930,7 @@ def update_global_settings(request):
             elif data["schedule_frequency"] == "daily":
                 crontab_schedule, _ = CrontabSchedule.objects.get_or_create(minute=0, hour=0)  # Midnight
                 PeriodicTask.objects.create(
-                    crontab=crontab_schedule,  
+                    crontab=crontab_schedule,
                     name=f"sort_collections_{client.shop_id}_daily",
                     task="shopify_app.tasks.sort_active_collections",
                     args=json.dumps([client.id])
@@ -1938,7 +1939,7 @@ def update_global_settings(request):
             elif data["schedule_frequency"] == "weekly":
                 crontab_schedule, _ = CrontabSchedule.objects.get_or_create(minute=0, hour=0, day_of_week="1")  # Monday
                 PeriodicTask.objects.create(
-                    crontab=crontab_schedule, 
+                    crontab=crontab_schedule,
                     name=f"sort_collections_{client.shop_id}_weekly",
                     task="shopify_app.tasks.sort_active_collections",
                     args=json.dumps([client.id])
@@ -1948,11 +1949,6 @@ def update_global_settings(request):
                 start_time = data.get("custom_start_time")
                 stop_time = data.get("custom_stop_time")
                 frequency_in_hours = data.get("custom_frequency_in_hours")
-                
-                client.custom_start_time = start_time
-                client.custom_stop_time = stop_time
-                client.custom_frequency_in_hours = frequency_in_hours
-                
 
                 if start_time and stop_time and frequency_in_hours:
                     start_hour, start_minute = map(int, start_time.split(':'))
@@ -1971,16 +1967,34 @@ def update_global_settings(request):
                             args=json.dumps([client.id])
                         )
                         current_hour += frequency_in_hours
-
+                    
+                    client.custom_start_time = start_time
+                    client.custom_stop_time = stop_time
+                    client.custom_frequency_in_hours = frequency_in_hours
                 else:
                     return Response({"error": "Invalid custom schedule parameters"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Update other client settings
-        if "stock_location" in data:
+        # Update stock location only if it's not an empty string
+        if "stock_location" in data and data["stock_location"].strip():
             client.stock_location = data["stock_location"]
 
-        if "lookback_periods" in data:
-            client.lookback_period = data["lookback_period"]
+        # Update lookback period only if it's a positive integer
+        if "lookback_period" in data:
+            lookback_period_value = data["lookback_period"]
+
+            # Check if it's a positive integer
+            if isinstance(lookback_period_value, int) and lookback_period_value > 0:
+                client.lookback_period = lookback_period_value
+            elif isinstance(lookback_period_value, str):
+                # If it's a string, try to convert it to an integer
+                try:
+                    value_as_int = int(lookback_period_value)
+                    if value_as_int > 0:
+                        client.lookback_period = value_as_int
+                except ValueError:
+                    logger.error("Invalid lookback period value")
+                    return Response({"error": "Invalid lookback period value"}, status=status.HTTP_400_BAD_REQUEST)
+
 
         client.save()
 
@@ -1988,7 +2002,11 @@ def update_global_settings(request):
             "message": "Global settings updated successfully",
             "shop_id": client.shop_id,
             "schedule_frequency": client.schedule_frequency,
+            "custom_start_time":client.custom_start_time,
+            "custom_stop_time":client.custom_stop_time,
+            "custom_frequency_in_hours":client.custom_frequency_in_hours,
             "stock_location": client.stock_location,
+            "lookback_period": client.lookback_period
         }, status=status.HTTP_200_OK)
 
     except Client.DoesNotExist:
@@ -2001,7 +2019,7 @@ def update_global_settings(request):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def get_and_update_collections(request):  # working and tested
+def get_and_update_collections(request):
     auth_header = request.headers.get("Authorization", None)
     if auth_header is None:
         return Response(
