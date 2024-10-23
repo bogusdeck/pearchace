@@ -231,7 +231,7 @@ def create_recurring_charge(shop_url, access_token, plan_id, is_annual, shop_id)
         "name": plan_name,
         "price": plan_price,
         "trial_days": 14,
-        "test": True,
+        # "test": True,
         "return_url": f"{url}/api/billing/confirm/?temp_token={temp_token}",
         "terms": f"{plan_name} subscription with {'annual' if is_annual else 'monthly'} billing"
     })
@@ -416,7 +416,6 @@ def create_one_time_charge(shop_url, access_token, charge_name, charge_price, re
         "name": charge_name,
         "price": charge_price,
         "return_url": return_url,
-        "test": True  
     })
     
     if charge.save():
