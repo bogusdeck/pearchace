@@ -50,10 +50,10 @@ CORS_ALLOWED_ORIGINS = [
     'http://3.108.104.68:80',
     'http://localhost:80',
     'https://frontend.pearchace.com',
-    'https://159.89.170.203:8000',
-    'https://143.244.131.36:3000',
-    'https://143.244.131.36:3001',
-    'https://143.244.131.36:3002',
+    'http://159.89.170.203:8000',
+    'http://143.244.131.36:3000',
+    'http://143.244.131.36:3001',
+    'http://143.244.131.36:3002',
 ]
 
 CORS_ALLOW_CREDENTIALS = True
