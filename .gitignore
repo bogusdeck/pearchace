@@ -90,3 +90,7 @@ db.sqlite3
 .venv/
 /shopify_django_app/settings.py
 settings.py
+/nginx
+nginx.conf
+/nginx/nginx.conf
+nginx/nginx.conf
