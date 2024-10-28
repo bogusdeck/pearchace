@@ -2,11 +2,13 @@ import requests
 import json
 import shopify
 from django.apps import apps
-from .models import Client
+from .models import Client, Usage
 from datetime import datetime
 import pytz
 from django.utils import timezone
 from datetime import datetime, timedelta
+from django.db import transaction
+
 
 from celery import shared_task
 
@@ -384,7 +386,6 @@ def calculate_recency_score(orders, product_id):
 
     return recency_score
 
-
 def calculate_sales_velocity_from_orders(orders, product_id, days, return_units=False):
     total_sold_units = 0
     print("total sold unit calculation done!")
@@ -476,82 +477,83 @@ def fetch_client_data(shop_url, access_token):
         print(f"Error fetching shop data: {response.status_code} - {response.text}")
         return {}
 
+# MAIN API FUNCTION
 def update_collection_products_order(
-      shop_url, access_token, collection_id, sorted_product_ids
-  ):
-      """
-      Updates the product order of a collection in Shopify.
+    shop_url, access_token, collection_id, sorted_product_ids
+):
+    """
+    Updates the product order of a collection in Shopify and updates usage data.
 
-      Args:
-          shop_url (str): The Shopify store URL.
-          access_token (str): The access token for Shopify API authentication.
-          collection_id (str): The ID of the collection to update.
-          sorted_product_ids (list): A list of product IDs in the desired order.
+    Args:
+        shop_url (str): The Shopify store URL.
+        access_token (str): The access token for Shopify API authentication.
+        collection_id (str): The ID of the collection to update.
+        sorted_product_ids (list): A list of product IDs in the desired order.
 
-      Returns:
-          bool: True if the update is successful, False otherwise.
-      """
-      try:
-          api_version = apps.get_app_config("shopify_app").SHOPIFY_API_VERSION
-          headers = _get_shopify_headers(access_token)
-          url = f"https://{shop_url}/admin/api/{api_version}/graphql.json"
-          collection_global_id = f"gid://shopify/Collection/{collection_id}"
+    Returns:
+        bool: True if the update is successful, False otherwise.
+    """
+    try:
+        api_version = apps.get_app_config("shopify_app").SHOPIFY_API_VERSION
+        headers = _get_shopify_headers(access_token)
+        url = f"https://{shop_url}/admin/api/{api_version}/graphql.json"
+        collection_global_id = f"gid://shopify/Collection/{collection_id}"
 
+        mutation = """
+        mutation updateProductOrder($id: ID!, $moves: [MoveInput!]!) {
+            collectionReorderProducts(id: $id, moves: $moves) {
+                userErrors {
+                    field
+                    message
+                }
+            }
+        }
+        """
+        
+        moves = [
+            {
+                "id": f"gid://shopify/Product/{product_id}",
+                "newPosition": str(position),
+            }
+            for position, product_id in enumerate(sorted_product_ids)
+        ]
+        variables = {"id": collection_global_id, "moves": moves}
+        response = requests.post(
+            url, json={"query": mutation, "variables": variables}, headers=headers
+        )
 
-          print("\n\n", api_version, headers, url, collection_global_id)
-          
-          mutation = """
-          mutation updateProductOrder($id: ID!, $moves: [MoveInput!]!) {
-              collectionReorderProducts(id: $id, moves: $moves) {
-                  userErrors {
-                      field
-                      message
-                  }
-              }
-          }
-          """
+        if response.status_code == 200:
+            result = response.json()
+            errors = (
+                result.get("data", {})
+                .get("collectionReorderProducts", {})
+                .get("userErrors", [])
+            )
 
-          print("working till now")
-          moves = [
-              {
-                  "id": f"gid://shopify/Product/{product_id}",
-                  "newPosition": str(position),  
-              }
-              for position, product_id in enumerate(sorted_product_ids)
-          ]
+            if not errors:
+                try:
+                    client = Client.objects.get(shop_url=shop_url)
+                    usage, created = Usage.objects.get_or_create(
+                        shop=client, usage_date=timezone.now().date()
+                    )
+                    with transaction.atomic():
+                        usage.sorts_count += 1
+                        usage.usage_date = timezone.now().date() 
+                        usage.save()
+                        
+                except Client.DoesNotExist:
+                    print(f"Client with shop_url {shop_url} does not exist.")
+                return True
+            else:
+                print(f"User errors: {errors}")
+        else:
+            print(f"Failed to reorder products: {response.status_code} - {response.text}")
+        return False
 
-          print(moves)
-          print("working till now 2")
-          variables = {"id": collection_global_id, "moves": moves}
-          print("working till now 3")
-          response = requests.post(
-              url, json={"query": mutation, "variables": variables}, headers=headers
-          )
-
-          print(response.json())
-          if response.status_code == 200:
-              result = response.json()
-              errors = (
-                  result.get("data", {})
-                  .get("collectionReorderProducts", {})
-                  .get("userErrors", [])
-              )
-
-              print("ho gya syd")
-              if not errors:
-                  return True
-              else:
-                  print(f"User errors: {errors}")
-          else:
-              print(
-                  f"Failed to reorder products: {response.status_code} - {response.text}"
-              )
-          return False
-
-      except Exception as e:
-          print(f"Exception during product order update: {str(e)}")
-          return False
-
+    except Exception as e:
+        print(f"Exception during product order update: {str(e)}")
+        return False
+    
 #########################
 
 ##not needed now might be in future

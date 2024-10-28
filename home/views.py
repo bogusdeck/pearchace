@@ -244,7 +244,7 @@ def available_sorts(request):
             return JsonResponse(
                 {"error": "Usage record not found"}, status=status.HTTP_404_NOT_FOUND
             )
-
+        
         except Subscription.DoesNotExist:
             return JsonResponse(
                 {"error": "Subscription record not found"},
@@ -777,7 +777,7 @@ def update_collection(request, collection_id):  # working not tested
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
-@api_view(["POST"]) # SORT NOW BUTTON
+@api_view(["POST"]) # not sort button for now
 @permission_classes([IsAuthenticated]) # celery done sorting done in queue #not using this ewwwwwwwwwwwwwwwwwwwwwww
 def update_product_order(request):  
     try:
@@ -1176,7 +1176,7 @@ def preview_products(request):
 
 ############################### SORTING SETTINGS ###########################################
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated]) #not using
 def post_quick_config(request):
     auth_header = request.headers.get("Authorization", None)
     if auth_header is None:
@@ -1225,7 +1225,7 @@ def post_quick_config(request):
         )
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated]) #not using
 def advance_config(request):
     auth_header = request.headers.get("Authorization", None)
     if auth_header is None:
@@ -1484,7 +1484,6 @@ def applied_on_active_collection(request):
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-
 ############################## GENERAL SETTINGS FOR COLLECTION ####################################
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
@@ -1509,14 +1508,27 @@ def sort_now(request):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-
         try:
             client = Client.objects.get(shop_id=shop_id)
+            usage = Usage.object.get(shop_id=shop_id)
+            subscription = Subscription.objects.get(subscription_id=usage.subscription_id)
+            sorting_plan = SortingPlan.object.get(plan_id=subscription.plan_id)
+            sort_limit = sorting_plan.sort_limit
+            # available_sorts = sort_limit - usage.sorts_count
+            
         except Client.DoesNotExist:
             return Response(
                 {"error": "Client not found"}, status=status.HTTP_404_NOT_FOUND
             )
-
+        except Usage.DoesNotExist:
+            return Response(
+                {'error': 'Usage not found'}, status=status.HTTP_404_NOT_FOUND
+            )
+        except SortingPlan.DoesNotExist:
+            return Response(
+                {'error': 'Sorting Plan not found'}, status=status.HTTP_404_NOT_FOUND
+            )
+        
         collection_id = request.data.get("collection_id")
         algo_id = request.data.get("algo_id")
 
@@ -1531,9 +1543,15 @@ def sort_now(request):
                 {"error": "Algorithm ID is required"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-                    
-        async_sort_product_order.delay(shop_id, collection_id, algo_id)
 
+        if usage.sorts_count <= sort_limit:   
+            return Response(
+                {"error": "No available sorts remaining for today"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+
+        async_sort_product_order.delay(shop_id, collection_id, algo_id)
         return Response({"message": "Sorting initiated"}, status=status.HTTP_202_ACCEPTED)
 
     except InvalidToken:
@@ -1541,7 +1559,6 @@ def sort_now(request):
 
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated]) # require to update lookback periods as it is moved to global settings
@@ -1981,7 +1998,6 @@ def update_global_settings(request):
         # Update lookback period only if it's a positive integer
         if "lookback_period" in data:
             lookback_period_value = data["lookback_period"]
-
             # Check if it's a positive integer
             if isinstance(lookback_period_value, int) and lookback_period_value > 0:
                 client.lookback_period = lookback_period_value
