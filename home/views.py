@@ -619,7 +619,9 @@ def get_client_collections(request, client_id):  # working and tested
                         "collection_name": collection.collection_name,
                         "collection_id": collection.collection_id,
                         "status": collection.status,
-                        "algo_id": algo_id,
+                        "last_sorted_date":collection.sort_date,
+                        "product_count":collection.products_count,
+                        "algo_id": algo_id
                     }
                 )
 
@@ -1093,10 +1095,10 @@ def search_products(request, collection_id):  #
             
             products_data = [
                     {
-                        "product_name": product.product_name,
-                        "product_id": product.product_id,
-                        "image": product.image_link,
-                        "stock": product.total_inventory
+                        "id": product.product_id,
+                        "title": product.product_name,
+                        "total_inventory": product.total_inventory,
+                        "image_link": product.image_link
                     }
                     for product in products
             ]
@@ -1510,9 +1512,9 @@ def sort_now(request):
 
         try:
             client = Client.objects.get(shop_id=shop_id)
-            usage = Usage.object.get(shop_id=shop_id)
+            usage = Usage.objects.get(shop_id=shop_id)
             subscription = Subscription.objects.get(subscription_id=usage.subscription_id)
-            sorting_plan = SortingPlan.object.get(plan_id=subscription.plan_id)
+            sorting_plan = SortingPlan.objects.get(plan_id=subscription.plan_id)
             sort_limit = sorting_plan.sort_limit
             # available_sorts = sort_limit - usage.sorts_count
             
@@ -1733,7 +1735,7 @@ def get_sorting_algorithms(request):  # Updated for new UI
             return descriptions.get(algo_name, "Description not available.")
 
 
-        primary_algorithms = ClientAlgo.objects.all()
+        primary_algorithms = ClientAlgo.objects.filter(is_primary=True)
         primary_algo_data = []
         for algo in primary_algorithms:
             primary_algo_data.append(
@@ -1745,13 +1747,14 @@ def get_sorting_algorithms(request):  # Updated for new UI
                 }
             )
 
+
         client_algorithms = ClientAlgo.objects.filter(shop_id=client)
         client_algo_data = []
         for algo in client_algorithms:
             client_algo_data.append(
                 {
                     "algo_id": algo.algo_id,
-                    "algo_name": algo.algo_name,
+                    "name": algo.algo_name,
                     "number_of_buckets": algo.number_of_buckets,
                     "default": algo == default_algo  
                 }
