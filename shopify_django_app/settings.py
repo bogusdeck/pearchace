@@ -221,12 +221,17 @@ LOGGING = {
             'handlers': ['console'],
             'propagate': True,
         },
-        'shopify_django_app': {  # Replace with the name of your app
+        'shopify_django_app': {  
             'level': 'DEBUG',  # Ensure it's set to DEBUG to capture debug logs
             'handlers': ['console'],
             'propagate': False,
         },
         'shopify_app': {  # Assuming you want to use this name for your logs
+            'level': 'DEBUG',
+            'handlers': ['console'],
+            'propagate': False,
+        },
+        'home': {  # Assuming you want to use this name for your logs
             'level': 'DEBUG',
             'handlers': ['console'],
             'propagate': False,

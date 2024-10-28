@@ -103,7 +103,7 @@ class ClientCollections(models.Model):
     products_count = models.IntegerField(default=0)
     sort_date = models.DateTimeField(null=True, blank=True)
     pinned_products = models.JSONField(blank=True, default=list)
-    algo = models.ForeignKey('ClientAlgo', on_delete=models.CASCADE, to_field='algo_id', null=True, blank=True)  
+    algo = models.ForeignKey('ClientAlgo', on_delete=models.CASCADE, to_field='algo_id', default=1) 
     parameters_used = models.JSONField(default=dict)
     updated_at = models.DateTimeField(null=True, blank=True)
     out_of_stock_down = models.BooleanField(default=False)

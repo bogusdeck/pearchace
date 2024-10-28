@@ -2,7 +2,7 @@
 from celery import shared_task, chord
 from django.db import transaction
 from django.utils import timezone
-from .models import Client, ClientCollections, ClientProducts, ClientAlgo, ClientGraph
+from .models import Client, ClientCollections, ClientProducts, ClientAlgo, ClientGraph , Usage, Subscription, SortingPlan
 from .api import (
     fetch_collections,
     fetch_products_by_collection,
@@ -173,6 +173,7 @@ def async_cron_sort_product_order(shop_id, collection_id, algo_id):
         client_collection = ClientCollections.objects.get(shop_id=shop_id, collection_id=collection_id)
         print('client_collection found', client_collection)
         days = client.lookback_period  
+        
         products = fetch_products_by_collection(client.shop_url, collection_id, days)
         # products = ClientProducts.objects.filter(shop_id=shop_id, collection_id=collection_id).values(
         #     "product_id", "product_name", "total_sold_units" , "created_at", "updated_at", "published_at", 
@@ -354,12 +355,7 @@ def async_sort_product_order(shop_id, collection_id, algo_id):
 
         bury_tag_products = [product for product in products if any(tag in product["tags"] for tag in bury_tags)]
         products = [product for product in products if product not in bury_tag_products]
-
-
-        
         # print(json.dumps(products, indent=4, default=str))
-        
-        
         if isinstance(buckets, dict):
             buckets = [buckets]  
             
@@ -412,6 +408,12 @@ def sort_active_collections(client_id):
     try:
         client = Client.objects.get(shop_id=client_id)
         logger.info(f"Sorting active collections for client {client.shop_id}")
+        
+        usage = Usage.object.get(shop_id = client.shop_id)
+        subscription = Subscription.objects.get(subscription_id=usage.subscription_id)
+        sorting_plan = SortingPlan.objects.get(plan_id = subscription.plan_id)
+        sort_limit = sorting_plan.sort_limit
+        available_sort = sort_limit - usage.sorts_count
 
         active_collections = ClientCollections.objects.filter(shop_id=client.shop_id, collection_status=True)
 
@@ -438,7 +440,6 @@ def sort_active_collections(client_id):
     except Exception as e:
         logger.error(f"Exception occurred while sorting active collections: {str(e)}")
     
-
 @shared_task
 def calculate_revenue(client_id):
     try:

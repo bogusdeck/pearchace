@@ -9,7 +9,7 @@ class Command(BaseCommand):
     def handle(self, *args, **kwargs):
         # Get the specific SortingPlan instance (plan id 1, assuming it's the Limited Plan)
         try:
-            limited_plan = SortingPlan.objects.get(id=1)
+            limited_plan = SortingPlan.objects.get(plan_id=1)
         except SortingPlan.DoesNotExist:
             self.stdout.write(self.style.ERROR('Limited Plan with id 1 does not exist.'))
             return
@@ -17,7 +17,7 @@ class Command(BaseCommand):
         # Set the specific values for shop_id and charge_id
         shop_id = '63270879430'
         charge_id = '26896433350'
-        status = 'active'  # Assuming it's an active subscription
+        status = 'active'  
 
         # Set the billing dates
         current_period_start = timezone.now()
