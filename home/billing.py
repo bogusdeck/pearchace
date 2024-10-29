@@ -56,6 +56,7 @@ def store_temp_token(shop_url, shop_id, temp_token, expiration_minutes=15):
         billing_token.temp_token = temp_token
         billing_token.expiration_time = expiration_time
         billing_token.status = 'active'
+        
         billing_token.save()
 
     except BillingTokens.DoesNotExist:
@@ -110,7 +111,10 @@ def activate_recurring_charge(shop_url, shop_id, access_token, charge_id):
         try:
             subscription = Subscription.objects.get(shop_id=shop_id)
             logger.debug(f"Subscription found for shop_id {shop_id}")
-
+            
+            plan = SortingPlan.objects.get(name=charge.name)
+            logger.debug(f"Plan found: {plan.name}, creating subscription for shop_id {shop_id}.")
+            subscription.plan= plan
             subscription.status = 'active'
             subscription.current_period_start = timezone.now()
             subscription.current_period_end = subscription.current_period_start + timezone.timedelta(days=30)
@@ -335,37 +339,33 @@ def confirm_billing(request):
             return JsonResponse({'error': 'Missing required parameters'}, status=400)
 
         try:
-            with transaction.atomic():
-                billing_token = BillingTokens.objects.select_for_update().get(temp_token=temp_token, status='active')
-                logger.debug(f"billing token retrieved: {billing_token}")
+            billing_token = BillingTokens.objects.get(temp_token=temp_token, status='active')
+            logger.debug(f"billing token retrieved: {billing_token}")
 
-                if billing_token.is_expired():
-                    return JsonResponse({'error': 'Temporary token has expired'}, status=400)
+            if billing_token.is_expired():
+                return JsonResponse({'error': 'Temporary token has expired'}, status=400)   
+               
+            shop_id = billing_token.shop_id  
+            client = Client.objects.get(shop_id=shop_id)
+            shop_url = client.shop_url  
+            access_token = client.access_token
+            
+            success = activate_recurring_charge(shop_url, shop_id, access_token, charge_id)
+            if success:
+                billing_token.status = 'expired'
+                billing_token.charge_id = charge_id
+                billing_token.save()
                 
-                shop_id = billing_token.shop_id  
-                client = Client.objects.get(shop_id=shop_id)
-                shop_url = client.shop_url  
-                access_token = client.access_token
-                
-                success = activate_recurring_charge(shop_url, shop_id, access_token, charge_id)
-                if success:
-                    # Update fields without triggering the unique constraint
-                    billing_token.status = 'expired'
-                    billing_token.charge_id = charge_id
-                    billing_token.save(update_fields=['status', 'charge_id'])
-                    
-                    logger.debug(f"Billing token updated with status 'expired' and charge_id: {charge_id}")
-
-                    # Update client membership status
-                    client.member = True
-                    client.save()
-                    logger.debug(f"Client status updated to member: {client.member}")
-
-                    # Redirect to frontend upon success
-                    frontend_url = os.environ.get('FRONTEND_URL')
-                    return HttpResponseRedirect(frontend_url)
-                else:
-                    return JsonResponse({'error': 'Failed to activate billing'}, status=400)
+                logger.debug(f"Billing token updated with status 'expired' and charge_id: {charge_id}")
+            
+                client.member = True
+                client.save()
+                logger.debug(f"Client status updated to member: {client.member}")
+             
+                frontend_url = os.environ.get('FRONTEND_URL')
+                return HttpResponseRedirect(frontend_url)
+            else:
+                return JsonResponse({'error': 'Failed to activate billing'}, status=400)
         
         except BillingTokens.DoesNotExist:
             return JsonResponse({'error': 'Temporary token is invalid or inactive'}, status=400)
