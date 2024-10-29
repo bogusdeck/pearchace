@@ -310,9 +310,6 @@ def create_billing_plan(request):
         print(f"Shop URL: {shop_url}, Access Token: {access_token}, Plan ID: {plan_id}")
         print(f"Billing URL generation for {'annual' if is_annual else 'monthly'} plan...")
 
-        refresh = RefreshToken.for_user(user)
-        temp_token = refresh.access_token
-        temp_token.set_exp(lifetime=timedelta(minutes=10))
         
         billing_url = create_recurring_charge(shop_url, access_token, plan_id, is_annual, shop_id)
         print(billing_url)
@@ -324,7 +321,9 @@ def create_billing_plan(request):
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
     
-# View to handle billing confirmation
+
+from django.db import transaction
+
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def confirm_billing(request):
@@ -336,32 +335,37 @@ def confirm_billing(request):
             return JsonResponse({'error': 'Missing required parameters'}, status=400)
 
         try:
-            billing_token = BillingTokens.objects.get(temp_token=temp_token, status='active')
+            with transaction.atomic():
+                billing_token = BillingTokens.objects.select_for_update().get(temp_token=temp_token, status='active')
+                logger.debug(f"billing token retrieved: {billing_token}")
 
-
-            if billing_token.is_expired():
-                return JsonResponse({'error': 'Temporary token has expired'}, status=400)
-
-            
-            shop_id = billing_token.shop_id  
-        
-            client = Client.objects.get(shop_id=shop_id)
-            shop_url = client.shop_url  
-            access_token = client.access_token
-            
-            success = activate_recurring_charge(shop_url, shop_id, access_token, charge_id)
-            if success:
-                billing_token.status = 'expired'
-                billing_token.charge_id = charge_id
-                billing_token.save()
+                if billing_token.is_expired():
+                    return JsonResponse({'error': 'Temporary token has expired'}, status=400)
                 
-                client.member = True
-                client.save()
+                shop_id = billing_token.shop_id  
+                client = Client.objects.get(shop_id=shop_id)
+                shop_url = client.shop_url  
+                access_token = client.access_token
+                
+                success = activate_recurring_charge(shop_url, shop_id, access_token, charge_id)
+                if success:
+                    # Update fields without triggering the unique constraint
+                    billing_token.status = 'expired'
+                    billing_token.charge_id = charge_id
+                    billing_token.save(update_fields=['status', 'charge_id'])
+                    
+                    logger.debug(f"Billing token updated with status 'expired' and charge_id: {charge_id}")
 
-                frontend_url = os.environ.get('FRONTEND_URL')
-                return HttpResponseRedirect(frontend_url)
-            else:
-                return JsonResponse({'error': 'Failed to activate billing'}, status=400)
+                    # Update client membership status
+                    client.member = True
+                    client.save()
+                    logger.debug(f"Client status updated to member: {client.member}")
+
+                    # Redirect to frontend upon success
+                    frontend_url = os.environ.get('FRONTEND_URL')
+                    return HttpResponseRedirect(frontend_url)
+                else:
+                    return JsonResponse({'error': 'Failed to activate billing'}, status=400)
         
         except BillingTokens.DoesNotExist:
             return JsonResponse({'error': 'Temporary token is invalid or inactive'}, status=400)
@@ -372,7 +376,7 @@ def confirm_billing(request):
 
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=400)
-    
+
 
 @api_view(['GET'])
 @permission_classes([AllowAny])

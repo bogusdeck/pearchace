@@ -233,12 +233,13 @@ class BillingTokens(models.Model):
         ('active', 'Active'),
         ('expired', 'Expired'),
     ]
-
+    
+    id = models.BigAutoField(primary_key=True)
     shop = models.ForeignKey(Client, on_delete=models.CASCADE, to_field='shop_id')
     shop_url = models.CharField(max_length=255)
     temp_token = models.CharField(max_length=255, unique=True)
     status = models.CharField(max_length=10, choices=TOKEN_STATUS_CHOICES, default='active')
-    charge_id = models.CharField(max_length=255, primary_key=True)  
+    charge_id = models.CharField(max_length=255, blank=True, null=True)  
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     expiration_time = models.DateTimeField()

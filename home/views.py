@@ -666,28 +666,36 @@ def search_collections(request, client_id):  # working and tested
             )
 
         query = request.GET.get("q", "")
-        print(query)
         try:
-            print(client_id)
             collections = ClientCollections.objects.filter(
                 shop_id=client_id, collection_name__icontains=query
             )
 
             print("collections found: ", collections)
+            paginator = ClientCollectionsPagination()
+            paginated_collections = paginator.paginate_queryset(
+                collections, request
+            )
+            
             collections_data = []
-            for collection in collections:
+            for collection in paginated_collections:
+                algo_id = ClientAlgo.objects.get(
+                    algo_id=collection.algo_id
+                ).algo_id
+                
                 collections_data.append(
                     {
                         "collection_name": collection.collection_name,
                         "collection_id": collection.collection_id,
                         "status": collection.status,
+                        "last_sorted_date": collection.sort_date,
+                        "product_count":collection.products_count,
+                        "algo_id":algo_id
                     }
                 )
 
-            return Response(
-                {"collections": collections_data}, status=status.HTTP_200_OK
-            )
-
+            return paginator.get_paginated_response(collections_data)
+        
         except ClientCollections.DoesNotExist:
             return Response(
                 {"error": "Collections not found"}, status=status.HTTP_404_NOT_FOUND
