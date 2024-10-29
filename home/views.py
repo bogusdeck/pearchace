@@ -705,6 +705,7 @@ def search_collections(request, client_id):  # working and tested
         return Response({"error": "Invalid token"}, status=status.HTTP_401_UNAUTHORIZED)
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
 
 @api_view(["PUT", "PATCH"])
 @permission_classes([IsAuthenticated]) # celery implemented fetch and store products
