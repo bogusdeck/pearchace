@@ -111,7 +111,7 @@ def activate_recurring_charge(shop_url, shop_id, access_token, charge_id):
         try:
             subscription = Subscription.objects.get(shop_id=shop_id)
             logger.debug(f"Subscription found for shop_id {shop_id}")
-            
+    
             plan = SortingPlan.objects.get(name=charge.name)
             logger.debug(f"Plan found: {plan.name}, creating subscription for shop_id {shop_id}.")
             subscription.plan= plan
@@ -153,7 +153,7 @@ def activate_recurring_charge(shop_url, shop_id, access_token, charge_id):
             usage, created = Usage.objects.get_or_create(
                 shop_id=shop_id,
                 subscription=subscription,
-                usage_date=timezone.now(),  
+                usage_date=timezone.now(), 
                 defaults={
                     'sorts_count': 0,
                     'addon_sorts_count': 0,
@@ -165,6 +165,7 @@ def activate_recurring_charge(shop_url, shop_id, access_token, charge_id):
                 logger.debug(f"New usage created for shop_id {shop_id} with usage_date set to now.")
             else:
                 usage.updated_at = timezone.now()
+                usage.charge_id = charge_id
                 usage.save()
                 logger.debug(f"Usage for shop_id {shop_id} updated (only updated_at changed).")
 
@@ -325,8 +326,6 @@ def create_billing_plan(request):
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
     
-
-from django.db import transaction
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
