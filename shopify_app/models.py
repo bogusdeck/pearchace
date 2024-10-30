@@ -184,6 +184,7 @@ class Subscription(models.Model):
     shop = models.ForeignKey(Client, on_delete=models.CASCADE, to_field='shop_id')  
     plan = models.ForeignKey(SortingPlan, on_delete=models.CASCADE)
     status = models.CharField(max_length=50)  
+    is_annual = models.BooleanField(default=False) 
     current_period_start = models.DateTimeField(null=True, blank=True)
     current_period_end = models.DateTimeField(null=True, blank=True)
     next_billing_date = models.DateTimeField(null=True, blank=True)

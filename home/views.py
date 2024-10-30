@@ -70,6 +70,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+import logging
+logger = logging.getLogger('myapp')
+
 ##########################################################################################################################
 # ██████   █████  ███████ ██   ██ ██████   ██████   █████  ██████  ██████  
 # ██   ██ ██   ██ ██      ██   ██ ██   ██ ██    ██ ██   ██ ██   ██ ██   ██ 
@@ -113,6 +116,8 @@ def index(request):
                 created_at = created_at.replace(tzinfo=pytz.UTC)
             except ValueError:
                 created_at = None
+                
+        default_algo = get_object_or_404(ClientAlgo, algo_id=1)
 
         client, created = Client.objects.update_or_create(
             shop_id=shop_id,
@@ -128,14 +133,21 @@ def index(request):
                 "access_token": access_token,
                 "is_active": True,
                 "uninstall_date": None,
-                "trial_used": False,
                 "timezone": timezone,
                 "createdateshopify": created_at,
+                "default_algo": default_algo
             },
         )
 
         if created:
             client.member = False
+            client.trial_used = False
+            client.lookback_period = 30     
+            client.custom_start_time = None
+            client.custom_stop_time = None
+            client.custom_frequency_in_hours = None
+            client.stock_location = 'all'  
+            
         client.save()
 
         refresh = RefreshToken.for_user(client)
@@ -186,7 +198,8 @@ def get_client_info(request):
              "shop_url":user.shop_url,
              "shop_name":user.shop_name,
              "subscription_status":user.member,
-             "message": "Collection fetch initiated."},
+             "message": "Collection fetch initiated."
+            },
             status=status.HTTP_200_OK,
         )
 
@@ -1906,9 +1919,7 @@ def sorting_rule(request, algo_id):
 #      ██ ██         ██       ██    ██ ██  ██ ██ ██    ██      ██ 
 # ███████ ███████    ██       ██    ██ ██   ████  ██████  ███████ 
 #######################################################################################################
-import logging
 
-logger = logging.getLogger('myapp')
 
 from django_celery_beat.models import PeriodicTask, CrontabSchedule, IntervalSchedule
 import json
@@ -2144,16 +2155,15 @@ def fetch_last_month_order_count(request):
 
         
         today = datetime.today()
-        print("today : ",today)
+        logger.debug(f"today date  : {today}")
         first_day_last_month = (today.replace(day=1) - timedelta(days=1)).replace(day=1)
         last_day_last_month = today.replace(day=1) - timedelta(days=1)
+        logger.debug(f"first date and last date of the last month : {first_day_last_month} {last_day_last_month}")
 
-        print("1st day : ",first_day_last_month," last day : ", last_day_last_month)
+        order_count = 8000
+        # order_count = fetch_order_for_billing(shop_url, first_day_last_month, last_day_last_month)
+        logger.debug(f"order count : {order_count}")
 
-        order_count = fetch_order_for_billing(shop_url, first_day_last_month, last_day_last_month)
-        print("result : ", order_count)
-
-        order_count = 16000
         
         if not order_count:
             return Response({"error": "Error fetching orders"}, status=500)
@@ -2165,7 +2175,63 @@ def fetch_last_month_order_count(request):
 
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def current_subscription_plan(request):
+    auth_header = request.headers.get("Authorization", None)
+    if auth_header is None:
+        return Response(
+            {"error": "Authorization header missing"},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    try:
+        token = auth_header.split(" ")[1]
+        jwt_auth = JWTAuthentication()
+        validated_token = jwt_auth.get_validated_token(token)
+        user = jwt_auth.get_user(validated_token)
+
+        shop_id = user.shop_id
+        shop_url = user.shop_url
+        if not shop_id:
+            return Response(
+                {"error": "Shop ID not found"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        if not shop_url:
+            return Response(
+                {"error": "Shop URL not found"}, status=status.HTTP_400_BAD_REQUEST
+            )    
         
+            
+        client = Client.objects.get(shop_url=shop_url)
+        usage = Usage.objects.get(shop_id=client.shop_id)
+        subscription = Subscription.objects.get(subscription_id=usage.subscription_id)
+        sorting_plan = SortingPlan.objects.get(plan_id=subscription.plan_id)
+
+        sort_limit = sorting_plan.sort_limit
+        available_sorts = sort_limit - usage.sorts_count
+        
+        subscription_data = {
+            'billing_cycle' : subscription.is_annual,
+            'current_period_start' : subscription.current_period_start,
+            'next_billing_date' : subscription.next_billing_date,
+            'plan_name' : subscription.plan.name,   
+            'sort_remaining' : available_sorts,
+            'total_sorts' : sort_limit,
+            'extra_sort': usage.addon_sorts_count,
+        }
+        
+        return Response(subscription_data , status=status.HTTP_200_OK)
+
+
+    except InvalidToken:
+        return Response({"error": "Invalid token"}, status=status.HTTP_401_UNAUTHORIZED)
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+     
 
 #######################################################################################################
 # ██   ██ ██ ███████ ████████  ██████  ██████  ██    ██ 

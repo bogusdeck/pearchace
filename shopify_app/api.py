@@ -9,6 +9,9 @@ from django.utils import timezone
 from datetime import datetime, timedelta
 from django.db import transaction
 
+import logging
+
+logger = logging.getLogger('myapp')
 
 from celery import shared_task
 
@@ -749,10 +752,12 @@ def fetch_order_for_billing(shop_url, start_date, end_date):
         return None
 
     access_token = client.access_token
+    logger.debug("Access token found")
     api_version = apps.get_app_config("shopify_app").SHOPIFY_API_VERSION
     headers = _get_shopify_headers(access_token)
     url = f"https://{shop_url}/admin/api/{api_version}/graphql.json"
-
+    logger.debug(f"URL: {url}")
+    
     total_orders = 0
     has_next_page = True
     after_cursor = None
@@ -773,14 +778,42 @@ def fetch_order_for_billing(shop_url, start_date, end_date):
         """
 
         response = requests.post(url, json={"query": query}, headers=headers)
+        
+        # Handle potential access denial for protected data
         if response.status_code != 200:
-            print(f"Error fetching orders: {response.status_code} - {response.text}")
+            logger.error(f"Error fetching orders: {response.status_code} - {response.text}")
             return None
 
-        data = response.json().get("data", {}).get("orders", {})
-        new_orders = data.get("edges", [])
-        has_next_page = data.get("pageInfo", {}).get("hasNextPage", False)
-        after_cursor = new_orders[-1]["cursor"] if has_next_page else None
-        total_orders += len(new_orders)
+        try:
+            response_json = response.json()
+        except ValueError:
+            logger.error("Failed to parse JSON response")
+            return None
 
+        
+        errors = response_json.get("errors")
+        if errors:
+            if any(error.get("extensions", {}).get("code") == "ACCESS_DENIED" for error in errors):
+                logger.error("Access denied: This app does not have permission to access order data.")
+                return None
+
+        # Continue processing if no errors
+        data = response_json.get("data")
+        if not data or "orders" not in data:
+            logger.error(f"Unexpected response structure: {response_json}")
+            return None
+
+        orders_data = data["orders"]
+        new_orders = orders_data.get("edges", [])
+        page_info = orders_data.get("pageInfo", {})
+
+        has_next_page = page_info.get("hasNextPage", False)
+        if new_orders:
+            after_cursor = new_orders[-1].get("cursor")
+            total_orders += len(new_orders)
+        else:
+            has_next_page = False
+
+    logger.debug(f"Total orders: {total_orders}")
     return total_orders
+
