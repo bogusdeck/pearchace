@@ -2,6 +2,7 @@
 from celery import shared_task, chord
 from django.db import transaction
 from django.utils import timezone
+from datetime import timedelta
 from .models import Client, ClientCollections, ClientProducts, ClientAlgo, ClientGraph , Usage, Subscription, SortingPlan
 from .api import (
     fetch_collections,
@@ -463,3 +464,16 @@ def calculate_revenue(client_id):
 
     except Exception as e:
         logger.error(f"Exception occurred while calculating revenue for client {client_id}: {str(e)}")
+        
+        
+@shared_task
+def reset_sort_counts():
+    reset_date = timezone.now() - timedelta(days=30)
+
+    expired_usages = Usage.objects.filter(created_at__lte=reset_date)
+
+    for usage in expired_usages:
+        usage.sorts_count = 0
+        # usage.addon_sorts_count = 0
+        usage.usage_date = timezone.now()  
+        usage.save()
