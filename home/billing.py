@@ -21,6 +21,8 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import InvalidToken
 from datetime import timedelta
 import requests
+from django.utils import timezone
+import requests
 import logging
 
 logger = logging.getLogger(__name__)
@@ -39,26 +41,29 @@ def get_access_token(shop_url):
     print("me running")
     return client.access_token
 
+
 def store_temp_token(shop_url, shop_id, temp_token, expiration_minutes=15):
     expiration_time = timezone.now() + timedelta(minutes=expiration_minutes)
+    cutoff_date = timezone.now() - timedelta(days=90)
 
-    try:
-        billing_token = BillingTokens.objects.get(shop_id=shop_id, shop_url=shop_url)
+    BillingTokens.objects.filter(created_at__lt=cutoff_date).delete()
 
-        billing_token.temp_token = temp_token
-        billing_token.expiration_time = expiration_time
-        billing_token.status = 'active'
+
+    existing_tokens = BillingTokens.objects.filter(shop_id=shop_id, shop_url=shop_url)
+
+    if existing_tokens.exists():
+        existing_tokens.update(status='expired')
         
-        billing_token.save()
+    BillingTokens.objects.create(
+        shop_id=shop_id,
+        shop_url=shop_url,
+        temp_token=temp_token,
+        expiration_time=expiration_time,
+        status='active',
+        charge_id=''  
+    )
 
-    except BillingTokens.DoesNotExist:
-        BillingTokens.objects.create(
-            shop_id=shop_id,
-            shop_url=shop_url,
-            temp_token=temp_token,
-            expiration_time=expiration_time,
-            status='active'
-        )
+    print(f"New token created for shop {shop_id} with shop_url {shop_url}. All previous tokens are marked as expired.")
 
 # GraphQL helper function
 def execute_graphql(shop_url, access_token, query, variables=None):
@@ -102,7 +107,6 @@ def create_recurring_charge_graphql(shop_url, shop_id, access_token, plan_id, is
     temp_token = generate_temp_token()
     logger.info(f"Generating new temporary token for billing {temp_token}")
     store_temp_token(shop_url, shop_id, temp_token)
-    
     logger.info("Temp token is stored SUCCESSFULLY")
 
     # Set the interval based on whether it's annual or monthly
@@ -206,12 +210,12 @@ def create_billing_plan(request):
 
         if plan_id is None:
             return Response({'error': 'Plan ID is missing'}, status=status.HTTP_400_BAD_REQUEST)
-        if not isinstance(plan_id, (int, float)):  
+        if not isinstance(plan_id, (int, float)):
             return Response({'error': 'Plan ID must be a number'}, status=status.HTTP_400_BAD_REQUEST)
 
         if is_annual is None:
             return Response({'error': 'is_annual is required'}, status=status.HTTP_400_BAD_REQUEST)
-        if not isinstance(is_annual, bool):  
+        if not isinstance(is_annual, bool):
             return Response({'error': 'is_annual must be a boolean'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
@@ -223,8 +227,35 @@ def create_billing_plan(request):
         if not access_token:
             return Response({'error': 'Access token is missing'}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Subscription creation or update
+        try:
+            subscription, created = Subscription.objects.get_or_create(
+                shop_id=shop_id,
+                defaults={
+                    'status': 'pending',
+                    'plan_id': plan_id,
+                    'is_annual': is_annual,
+                }
+            )
+            
+            if not created:
+                # Update existing subscription data to reflect pending status and input parameters
+                subscription.status = 'pending'
+                subscription.plan_id = plan_id
+                subscription.is_annual = is_annual
+                subscription.updated_at = timezone.now()
+                subscription.save()
+                logger.info(f"Subscription updated to pending status for shop_id {shop_id}.")
+            else:
+                logger.info(f"New subscription created with pending status for shop_id {shop_id}.")
+
+        except Exception as e:
+            logger.error(f"Error creating or updating subscription for shop_id {shop_id}: {str(e)}")
+            return Response({'error': 'Failed to create or update subscription'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
         logger.info(f"Billing URL generation for {'annual' if is_annual else 'monthly'} plan via GraphQL...")
 
+        # Generate billing URL
         billing_url = create_recurring_charge_graphql(shop_url, shop_id, access_token, plan_id, is_annual)
         logger.info("Billing URL successfully generated via GraphQL.")
         
@@ -236,6 +267,7 @@ def create_billing_plan(request):
     except Exception as e:
         logger.error(f"An error occurred: {str(e)}")
         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
@@ -285,20 +317,23 @@ def confirm_billing(request):
 
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=400)
-
+    
 def activate_recurring_charge(shop_url, shop_id, access_token, charge_id):
     logger.debug(f"Starting activate_recurring_charge for shop_url: {shop_url}, shop_id: {shop_id}, charge_id: {charge_id}")
 
     try:
+        # Set up Shopify session
         shopify.Session.setup(api_key=os.environ.get('SHOPIFY_API_KEY'), secret=os.environ.get('SHOPIFY_API_SECRET'))
         session = shopify.Session(shop_url, os.environ.get('SHOPIFY_API_VERSION'), access_token)
         shopify.ShopifyResource.activate_session(session)
 
         logger.debug("Shopify session activated successfully.")
 
+        # Find the charge using Shopify API
         charge = shopify.RecurringApplicationCharge.find(charge_id)
         logger.debug(f"RecurringApplicationCharge found: {charge}")
 
+        # Activate charge if not already active
         if charge.status == 'accepted':
             charge.activate()
             logger.debug(f"Charge {charge_id} activated successfully.")
@@ -311,8 +346,12 @@ def activate_recurring_charge(shop_url, shop_id, access_token, charge_id):
         try:
             client = Client.objects.get(shop_id=shop_id)
             logger.debug(f"Client found for shop_id {shop_id}")
+            
+            subscription = Subscription.objects.get(shop_id=shop_id)
+            plan = subscription.plan  
+            is_annual = subscription.is_annual  
 
-            plan = SortingPlan.objects.get(name=charge.name)
+            # plan = SortingPlan.objects.get(name=charge.name)
             logger.debug(f"Plan found: {plan.name}, associating with subscription for shop_id {shop_id}.")
 
             if not client.trial_used:
@@ -324,61 +363,45 @@ def activate_recurring_charge(shop_url, shop_id, access_token, charge_id):
                 current_period_start = timezone.now()
                 logger.debug("Trial already used; setting current period start to now.")
 
-            subscription, created = Subscription.objects.get_or_create(
-                shop_id=shop_id,
-                defaults={
-                    'plan': plan,
-                    'status': 'active',
-                    'current_period_start': current_period_start,
-                    'current_period_end': current_period_start + timedelta(days=30),
-                    'next_billing_date': current_period_start + timedelta(days=30),
-                    'charge_id': charge_id,
-                    'updated_at': timezone.now(),
-                }
-            )
+            period_length = 365 if is_annual else 30
+            current_period_end = current_period_start + timedelta(days=period_length)
 
-            if not created:
-                subscription.plan = plan
-                subscription.status = 'active'
-                subscription.current_period_start = current_period_start
-                subscription.current_period_end = current_period_start + timedelta(days=30)
-                subscription.next_billing_date = subscription.current_period_end
-                subscription.charge_id = charge_id
-                subscription.updated_at = timezone.now()
-                subscription.save()
-                logger.debug(f"Subscription for shop_id {shop_id} updated successfully.")
-            else:
-                logger.debug(f"New subscription created for shop_id {shop_id}.")
+            # Update existing subscription to active status
+            subscription.status = 'active'  
+            subscription.current_period_start = current_period_start
+            subscription.current_period_end = current_period_end
+            subscription.next_billing_date = current_period_end
+            subscription.charge_id = charge_id
+            subscription.updated_at = timezone.now()
+            subscription.save()
+            logger.debug(f"Subscription for shop_id {shop_id} updated to active status successfully.")
 
         except SortingPlan.DoesNotExist:
             logger.error(f"SortingPlan with name '{charge.name}' not found for shop_id {shop_id}.")
             return False
+        except Subscription.DoesNotExist:
+            logger.error(f"Subscription not found for shop_id {shop_id}. Ensure it is created during billing plan.")
+            return False
         except Exception as e:
-            logger.exception(f"Error while creating/updating subscription for shop_id {shop_id}: {e}")
+            logger.exception(f"Error while updating subscription for shop_id {shop_id}: {e}")
             return False
 
         try:
-            usage, created = Usage.objects.get_or_create(
-                shop_id=shop_id,
-                subscription=subscription,
-                usage_date=timezone.now(),
-                defaults={
-                    'sorts_count': 0,
-                    'addon_sorts_count': 0,
-                    'charge_id': charge_id,
-                }
-            )
+            # Update usage record associated with this subscription
+            usage = Usage.objects.get(shop_id=shop_id, subscription=subscription)
+            usage.sorts_count = 0
+            usage.addon_sorts_count = 0
+            usage.usage_date = None  
+            usage.updated_at = timezone.now()
+            usage.charge_id = charge_id  # Update charge ID
+            usage.save()
+            logger.debug(f"Usage for shop_id {shop_id} updated with sorts_count, addon_sorts_count reset, and usage_date set to null.")
 
-            if created:
-                logger.debug(f"New usage created for shop_id {shop_id} with usage_date set to now.")
-            else:
-                usage.updated_at = timezone.now()
-                usage.charge_id = charge_id
-                usage.save()
-                logger.debug(f"Usage for shop_id {shop_id} updated (only updated_at changed).")
-
+        except Usage.DoesNotExist:
+            logger.error(f"Usage record not found for shop_id {shop_id}. Ensure it is created during billing plan.")
+            return False
         except Exception as e:
-            logger.exception(f"Error while updating/creating usage for shop_id {shop_id}: {e}")
+            logger.exception(f"Error while updating usage for shop_id {shop_id}: {e}")
             return False
 
         return True
@@ -387,8 +410,6 @@ def activate_recurring_charge(shop_url, shop_id, access_token, charge_id):
         logger.exception(f"Error occurred while activating recurring charge for shop_id {shop_id} with charge_id {charge_id}: {e}")
         return False
 
-import requests
-from django.utils import timezone
 
 def cancel_active_recurring_charges(shop_url, access_token):
     shopify_graphql_url = f"https://{shop_url}/admin/api/{os.environ.get('SHOPIFY_API_VERSION')}/graphql.json"
@@ -476,7 +497,6 @@ def cancel_active_recurring_charges(shop_url, access_token):
     return True
 
 
-
 @api_view(['GET'])
 @permission_classes([AllowAny])
 @csrf_exempt    
@@ -539,47 +559,60 @@ def create_one_time_charge(shop_url, access_token, charge_name, charge_price, re
         "X-Shopify-Access-Token": access_token,
     }
 
-    # GraphQL mutation for creating an application charge
     mutation = """
-    mutation($input: AppSubscriptionCreateInput!) {
-      appSubscriptionCreate(input: $input) {
+    mutation AppPurchaseOneTimeCreate($name: String!, $price: MoneyInput!, $returnUrl: URL!) {
+      appPurchaseOneTimeCreate(
+        name: $name,
+        price: $price,
+        returnUrl: $returnUrl,
+        test : true
+      ) {
         userErrors {
           field
           message
         }
-        appSubscription {
+        appPurchaseOneTime {
+          createdAt  
           id
-          confirmationUrl
         }
+        confirmationUrl  
       }
     }
     """
-    
+
     variables = {
-        "input": {
-            "name": charge_name,
-            "price": charge_price,
-            "returnUrl": return_url,
-            "test": True,  
-        }
+        "name": charge_name,
+        "price": {"amount": charge_price, "currencyCode": "USD"},
+        "returnUrl": return_url,
     }
 
     response = requests.post(shopify_graphql_url, json={'query': mutation, 'variables': variables}, headers=headers)
     response_data = response.json()
+    logger.debug(f"response.json : {response_data}")
 
+    # Log any errors if they occur
     if 'errors' in response_data:
         errors = response_data['errors']
         logger.error(f"One-time charge creation failed with errors: {errors}")
         raise Exception("Failed to create one-time charge.")
 
-    user_errors = response_data.get('data', {}).get('appSubscriptionCreate', {}).get('userErrors', [])
+    user_errors = response_data.get('data', {}).get('appPurchaseOneTimeCreate', {}).get('userErrors', [])
     if user_errors:
         error_messages = [f"{error['field']}: {error['message']}" for error in user_errors]
-        logger.error(f"GraphQL errors: {error_messages}")
+        logger.error(f"GraphQL user errors: {error_messages}")
         raise Exception("Failed to create one-time charge due to user errors.")
+    
+    charge = response_data['data']['appPurchaseOneTimeCreate'].get('appPurchaseOneTime')
+    confirmation_url = response_data.get('data', {}).get('appPurchaseOneTimeCreate', {}).get('confirmationUrl')
 
-    charge = response_data['data']['appSubscriptionCreate']['appSubscription']
-    return charge['confirmationUrl']
+    if charge:
+        charge_id = charge.get('id')
+        logger.debug(f"Charge ID: {charge_id}")
+        logger.debug(f"Confirmation URL: {confirmation_url}")
+        return charge_id, confirmation_url  
+    else:
+        return None, None  
+
 
 
 @api_view(['POST'])
@@ -590,12 +623,11 @@ def purchase_additional_sorts(request):
         return Response({'error': 'Authorization header missing'}, status=status.HTTP_401_UNAUTHORIZED)
 
     try:
-        # Extract and validate JWT token
         token = auth_header.split(' ')[1]
         jwt_auth = JWTAuthentication()
         validated_token = jwt_auth.get_validated_token(token)
         user = jwt_auth.get_user(validated_token)
-
+        
         shop_url = user.shop_url
         shop_id = user.shop_id
 
@@ -603,28 +635,39 @@ def purchase_additional_sorts(request):
             return Response({'error': 'Shop url not found'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            # Fetch the client object
             client = Client.objects.get(shop_id=shop_id)
             access_token = client.access_token
 
-            # Retrieve the number of additional sorts from request data (default to 100)
-            additional_sorts = request.data.get('sorts', 100)  
+            additional_sorts = request.data.get('sorts', 100)
             charge_name = f"Purchase {additional_sorts} Additional Sorts"
-            charge_price = 5.00  # Assuming a fixed price of $5 per additional sort
+            charge_price = float(5.00)
+            
+            logger.debug(f"{additional_sorts} for {charge_price} is being initiated...")
 
-            # Prepare the return URL for billing confirmation
             url = os.environ.get('BACKEND_URL')  
             temp_token = generate_temp_token()
+            logger.debug("Temp token generated")
             store_temp_token(shop_url, shop_id, temp_token)  
+            logger.debug("Temp token stored successfully")
+            
             return_url = f"{url}/api/billing/confirm/?temp_token={temp_token}&sorts={additional_sorts}"
+            logger.debug("Return URL generated")
 
-            # Create the one-time charge using the Shopify GraphQL API
-            billing_url = create_one_time_charge(shop_url, access_token, charge_name, charge_price, return_url)
+            charge_id, billing_url = create_one_time_charge(shop_url, access_token, charge_name, charge_price, return_url)
 
+            if charge_id :
+                logger.debug(f"charge id : {charge_id}")
+                charge_id = charge_id.split('/')[-1]
+                billing_token = BillingTokens.objects.get(temp_token=temp_token , status='active')
+                billing_token.charge_id = charge_id
+                billing_token.save()
+                logger.debug("billing token charge id saved in db")
+                
             if billing_url:
+                logger.debug(f"Billing URL: {billing_url}")
                 return Response({'billing_url': billing_url}, status=status.HTTP_200_OK)
             else:
-                return Response({'error': 'Failed to create one-time charge'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'error': 'failed to create one-time charge'}, status=status.HTTP_400_BAD_REQUEST)
 
         except Client.DoesNotExist:
             return Response({'error': 'Client not found'}, status=status.HTTP_404_NOT_FOUND)
@@ -661,9 +704,6 @@ def extra_sort_confirm(request):
             if not subscription:
                 return JsonResponse({'error': 'Active subscription not found'}, status=404)
 
-            # Update the charge_id field in Subscription
-            subscription.charge_id = charge_id
-            subscription.save()
 
             # Update addon_sorts_count in Usage
             usage = Usage.objects.filter(shop_id=shop_id, subscription=subscription).first()
@@ -678,7 +718,6 @@ def extra_sort_confirm(request):
                 usage.addon_sorts_count += additional_sorts
                 usage.save()
 
-            # Expire billing token after successful update
             billing_token.status = 'expired'
             billing_token.save()
             
