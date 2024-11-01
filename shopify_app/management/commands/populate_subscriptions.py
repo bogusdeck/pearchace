@@ -33,6 +33,7 @@ class Command(BaseCommand):
             current_period_end=current_period_end,
             next_billing_date=next_billing_date,
             charge_id=charge_id,
+            is_annual = False
         )
         
         if created:
