@@ -1178,14 +1178,15 @@ def preview_products(request):
             )
 
             print(products)
-            product_data = {
-                product['product_id']: {
+            product_data = [
+                {
+                    'product_id' : product['product_id'],
                     'product_name': product['product_name'],
                     'image_link': product['image_link'],
                     'total_inventory': product['total_inventory']
                 }
                 for product in products
-            }
+            ]
 
             return Response(product_data, status=200)
         except ClientProducts.DoesNotExist:
