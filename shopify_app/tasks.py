@@ -475,5 +475,6 @@ def reset_sort_counts():
     for usage in expired_usages:
         usage.sorts_count = 0
         # usage.addon_sorts_count = 0
+        usage.created_at = timezone.now()
         usage.usage_date = timezone.now()  
         usage.save()
