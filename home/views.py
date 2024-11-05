@@ -1140,7 +1140,7 @@ def search_products(request, collection_id):  #
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated]) #done and tested
+@permission_classes([IsAuthenticated]) #done and tested #pagination needed 
 def preview_products(request):
     auth_header = request.headers.get("Authorization", None)
     if auth_header is None:
@@ -1161,7 +1161,7 @@ def preview_products(request):
                 {"error":"Shop ID not found"}, status=status.HTTP_400_BAD_REQUEST
             )
 
-        collection_id = request.data.get("collection_id")
+        collection_id = request.GET.get("collection_id")
         
         print(collection_id)
 

@@ -466,7 +466,7 @@ def calculate_revenue(client_id):
         logger.error(f"Exception occurred while calculating revenue for client {client_id}: {str(e)}")
         
         
-@shared_task
+@shared_task #crawller
 def reset_sort_counts():
     reset_date = timezone.now() - timedelta(days=30)
 
