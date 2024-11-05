@@ -24,7 +24,7 @@ class Client(AbstractBaseUser):
     id = models.BigAutoField(primary_key=True)
     shop_id = models.CharField(max_length=255, unique=True)
     shop_name = models.CharField(max_length=255, unique=True)
-    email = models.EmailField(max_length=255, unique=True)
+    email = models.EmailField(max_length=255, unique=False)
     phone_number = models.CharField(max_length=20, blank=True, null=True)
     shop_url = models.URLField(max_length=255, blank=True, null=True)
     country = models.CharField(max_length=255, blank=True, null=True)
@@ -78,8 +78,8 @@ class Client(AbstractBaseUser):
         default='all'
     )
 
-    USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = ['shop_name', 'shop_id']
+    USERNAME_FIELD = 'shop_name'
+    REQUIRED_FIELDS = ['shop_id']
 
     objects = ClientManager()
 

@@ -387,19 +387,36 @@ def activate_recurring_charge(shop_url, shop_id, access_token, charge_id):
             return False
 
         try:
-            # Update usage record associated with this subscription
-            usage = Usage.objects.get(shop_id=shop_id, subscription=subscription)
-            usage.sorts_count = 0
-            usage.addon_sorts_count = 0
-            usage.usage_date = None  
-            usage.updated_at = timezone.now()
-            usage.charge_id = charge_id  # Update charge ID
-            usage.save()
-            logger.debug(f"Usage for shop_id {shop_id} updated with sorts_count, addon_sorts_count reset, and usage_date set to null.")
+            usage, created = Usage.objects.get_or_create(
+            shop_id=shop_id, 
+            subscription=subscription,
+            defaults={
+                'sorts_count': 0,
+                'orders_count': 0,
+                'addon_sorts_count': 0,
+                'charge_id': charge_id,
+                'usage_date': timezone.now().date(), 
+                'created_at': timezone.now(),
+                'updated_at': timezone.now()
+                }
+            )
 
+            if created:
+                logger.debug(f"New Usage record created for shop_id {shop_id}.")
+            else:
+                # Update fields for existing usage data
+                usage.sorts_count = 0
+                usage.addon_sorts_count = 0
+                usage.usage_date = timezone.now().date()
+                usage.updated_at = timezone.now()
+                usage.charge_id = charge_id  
+                usage.save()
+                logger.debug(f"Existing Usage record updated for shop_id {shop_id}.")
+                
         except Usage.DoesNotExist:
             logger.error(f"Usage record not found for shop_id {shop_id}. Ensure it is created during billing plan.")
             return False
+    
         except Exception as e:
             logger.exception(f"Error while updating usage for shop_id {shop_id}: {e}")
             return False

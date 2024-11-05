@@ -2161,8 +2161,8 @@ def fetch_last_month_order_count(request):
         last_day_last_month = today.replace(day=1) - timedelta(days=1)
         logger.debug(f"first date and last date of the last month : {first_day_last_month} {last_day_last_month}")
 
-        order_count = 8000
-        # order_count = fetch_order_for_billing(shop_url, first_day_last_month, last_day_last_month)
+        # order_count = 8000
+        order_count = fetch_order_for_billing(shop_url, first_day_last_month, last_day_last_month)
         logger.debug(f"order count : {order_count}")
 
         
