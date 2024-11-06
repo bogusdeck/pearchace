@@ -469,12 +469,16 @@ def calculate_revenue(client_id):
 @shared_task #crawller
 def reset_sort_counts():
     reset_date = timezone.now() - timedelta(days=30)
+    logger.debug("reset_date : ", reset_date)
+
 
     expired_usages = Usage.objects.filter(created_at__lte=reset_date)
+    logger.debug("expired usages : ", expired_usages)
 
     for usage in expired_usages:
+        logger.debug(f"usage : {usage}")
         usage.sorts_count = 0
         # usage.addon_sorts_count = 0
         usage.created_at = timezone.now()
         usage.usage_date = timezone.now()  
-        usage.save()
+        usage.save()    

@@ -242,6 +242,7 @@ def available_sorts(request):
             sorting_plan = SortingPlan.objects.get(plan_id=subscription.plan_id)
 
             sort_limit = sorting_plan.sort_limit
+            sort_limit += usage.addon_sorts_count
             available_sorts = sort_limit - usage.sorts_count
 
             return Response(
@@ -409,7 +410,6 @@ def get_graph(request):
         return JsonResponse(
             {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
-
 
 @api_view(["GET"]) # client's last active collections which are sorted by us 
 @permission_classes([IsAuthenticated])
@@ -1539,6 +1539,7 @@ def sort_now(request):
             subscription = Subscription.objects.get(subscription_id=usage.subscription_id)
             sorting_plan = SortingPlan.objects.get(plan_id=subscription.plan_id)
             sort_limit = sorting_plan.sort_limit
+            sort_limit += usage.addon_sorts_count
             # available_sorts = sort_limit - usage.sorts_count
             
         except Client.DoesNotExist:
@@ -1569,7 +1570,7 @@ def sort_now(request):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if usage.sorts_count <= sort_limit:   
+        if usage.sorts_count >= sort_limit:   
             return Response(
                 {"error": "No available sorts remaining for today"},
                 status=status.HTTP_403_FORBIDDEN,

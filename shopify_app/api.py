@@ -535,10 +535,12 @@ def update_collection_products_order(
 
             if not errors:
                 try:
+                    # Retrieve the client by shop URL
                     client = Client.objects.get(shop_url=shop_url)
-                    usage, created = Usage.objects.get_or_create(
-                        shop=client, usage_date=timezone.now().date()
-                    )
+                    # Fetch the existing usage entry for that client
+                    usage = Usage.objects.get(shop=client)
+
+                    # Update the sorts count and save the usage entry
                     with transaction.atomic():
                         usage.sorts_count += 1
                         usage.usage_date = timezone.now().date() 
@@ -546,6 +548,8 @@ def update_collection_products_order(
                         
                 except Client.DoesNotExist:
                     print(f"Client with shop_url {shop_url} does not exist.")
+                except Usage.DoesNotExist:
+                    print(f"Usage data for client {client.id} does not exist.")
                 return True
             else:
                 print(f"User errors: {errors}")
