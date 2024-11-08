@@ -62,7 +62,6 @@ def async_fetch_and_store_collections(shop_id):
     try:
         logger.info(f"Starting async fetch and store collections for shop_id: {shop_id}")
 
-        # Fetch the client data
         try:
             client = Client.objects.get(shop_id=shop_id)
             logger.debug(f"Client found for shop_id: {shop_id}")
@@ -70,7 +69,6 @@ def async_fetch_and_store_collections(shop_id):
             logger.error(f"Client not found for shop_id: {shop_id}")
             return {"status": "error", "message": f"Client not found for shop_id {shop_id}"}
 
-        # Fetch collections from Shopify
         collections = fetch_collections(client.shop_url)
         logger.debug(f"Fetched {len(collections)} collections for shop_id: {shop_id}")
 
@@ -87,7 +85,6 @@ def async_fetch_and_store_collections(shop_id):
                 logger.error(f"Default algorithm 'Promote New' not found.")
                 default_algo = None
 
-            # Create or update the ClientCollections entry
             client_collection, created = ClientCollections.objects.get_or_create(
                 collection_id=collection_id,
                 shop_id=shop_id,
@@ -122,7 +119,6 @@ def async_fetch_and_store_products(shop_url, shop_id, collection_id, days):
     try:
         logger.info(f"Starting product fetch for shop_id: {shop_id}, collection_id: {collection_id}, days: {days}")
 
-        # Fetch products by collection
         products = fetch_products_by_collection(shop_url, collection_id, days)
         logger.debug(f"Fetched {len(products)} products from collection_id {collection_id} for shop_id {shop_id}")
 
@@ -153,7 +149,6 @@ def async_fetch_and_store_products(shop_url, shop_id, collection_id, days):
 
             logger.debug(f"Updating product in database: {product_name} (ID: {product_id})")
 
-            # Update or create ClientProducts entry
             ClientProducts.objects.update_or_create(
                 product_id=product_id,
                 defaults={
@@ -175,7 +170,6 @@ def async_fetch_and_store_products(shop_url, shop_id, collection_id, days):
                 }
             )
 
-        # Update total revenue and total sales in the ClientCollections model
         ClientCollections.objects.filter(collection_id=collection_id, shop_id=shop_id).update(
             collection_total_revenue=total_revenue,
             collection_sold_units=total_sales
@@ -191,106 +185,94 @@ def async_fetch_and_store_products(shop_url, shop_id, collection_id, days):
 @shared_task
 def async_cron_sort_product_order(shop_id, collection_id, algo_id):
     try:
-        print("Async advacne sort product order running")
+        logger.info(f"Starting advanced sort for shop_id: {shop_id}, collection_id: {collection_id}, algo_id: {algo_id}")
+
         client = Client.objects.get(shop_id=shop_id)
-        print("client is found", client)
-        client_collection = ClientCollections.objects.get(shop_id=shop_id, collection_id=collection_id)
-        print('client_collection found', client_collection)
-        days = client.lookback_period  
+        logger.info(f"Client found: {client}")
         
+        client_collection = ClientCollections.objects.get(shop_id=shop_id, collection_id=collection_id)
+        logger.info(f"Client collection found: {client_collection}")
+
+        days = client.lookback_period
         products = fetch_products_by_collection(client.shop_url, collection_id, days)
-        # products = ClientProducts.objects.filter(shop_id=shop_id, collection_id=collection_id).values(
-        #     "product_id", "product_name", "total_sold_units" , "created_at", "updated_at", "published_at", 
-        #     "tags", "variant_count", "variant_availability", "total_revenue", "total_inventory", 
-        #     "sales_velocity"
-        # )
+        logger.debug(f"Total products fetched from database: {len(products)}")
 
-        print("total products fetched from database :", len(products))
-
-        client_collection = ClientCollections.objects.get(shop_id=shop_id, collection_id=collection_id)
-        
         total_collection_revenue = sum(product['total_revenue'] for product in products)
+        logger.info(f"Total collection revenue calculated: {total_collection_revenue}")
 
         if client_collection.collection_total_revenue is not None:
-            print(f"Existing total collection revenue found: {client_collection.collection_total_revenue}, overwriting...")
+            logger.info(f"Existing total collection revenue found: {client_collection.collection_total_revenue}, overwriting...")
         else:
-            print("No previous total collection revenue found, saving for the first time...")
+            logger.info("No previous total collection revenue found, saving for the first time...")
 
         client_collection.collection_total_revenue = total_collection_revenue
         client_collection.save()
 
-        
         pinned_product_ids = client_collection.pinned_products
         new_order = []
 
         if pinned_product_ids:
+            logger.info("Pinned products found, processing...")
             products, pinned_products = remove_pinned_products(products, pinned_product_ids)
+
             if client_collection.pinned_out_of_stock_down:
                 pinned_products, ofs_pinned = segregate_pinned_products(pinned_products)
+                logger.info(f"Out of stock pinned products segregated: {len(ofs_pinned)}")
             else:
                 ofs_pinned = []
-            new_order.extend(pinned_products)  
+            new_order.extend(pinned_products)
         else:
             pinned_products = []
             ofs_pinned = []
-        
 
         if client_collection.out_of_stock_down:
             products, ofs_products = push_out_of_stock_down(products)
+            logger.info(f"Out of stock products pushed down: {len(ofs_products)}")
         else:
             ofs_products = []
-
-
 
         client_algo = ClientAlgo.objects.get(algo_id=algo_id)
         boost_tags = client_algo.boost_tags
         bury_tags = client_algo.bury_tags
         buckets = client_algo.bucket_parameters
-        
-        
+
         boost_tag_products = [product for product in products if any(tag in product["tags"] for tag in boost_tags)]
-        new_order.extend(boost_tag_products) #
+        new_order.extend(boost_tag_products)
+        logger.info(f"Boost tag products added: {len(boost_tag_products)}")
 
         products = [product for product in products if product not in boost_tag_products]
 
         bury_tag_products = [product for product in products if any(tag in product["tags"] for tag in bury_tags)]
         products = [product for product in products if product not in bury_tag_products]
+        logger.info(f"Bury tag products removed: {len(bury_tag_products)}")
 
-
-        
         if isinstance(buckets, dict):
-            buckets = [buckets]  
-            
-        for bucket in buckets:
-            print("Processing bucket: ", bucket)
+            buckets = [buckets]
 
+        for bucket in buckets:
             rule_name = bucket.get("rule_name")
-            rule_params = bucket.get("parameters", {})  
-            capping = rule_params.pop("capping", None)  
-            
+            rule_params = bucket.get("parameters", {})
+            capping = rule_params.pop("capping", None)
+
             sort_function = ALGO_ID_TO_FUNCTION.get(rule_name)
             if sort_function:
-                print(f"Sorting function found: {sort_function}")
-
-    
+                logger.info(f"Sorting function found for rule: {rule_name}, applying sort...")
                 capped_products, uncapped_products = sort_function(products, capping=capping, **rule_params)
 
                 if capped_products:
                     new_order.extend(capped_products)
+                    logger.info(f"Capped products added: {len(capped_products)}")
 
                 products = uncapped_products if uncapped_products else products
-
             else:
-                print(f"No sort function found for rule: {rule_name}")
+                logger.warning(f"No sort function found for rule: {rule_name}")
 
-        
         new_order.extend(bury_tag_products)
         new_order.extend(ofs_pinned)
         new_order.extend(ofs_products)
 
-        print("total products sorted", len(new_order))
-        
-    
+        logger.info(f"Total products sorted: {len(new_order)}")
+
         pid = pid_extractor(new_order)
         success = update_collection_products_order(client.shop_url, client.access_token, collection_id, pid)
 
@@ -298,11 +280,11 @@ def async_cron_sort_product_order(shop_id, collection_id, algo_id):
             ClientProducts.objects.filter(product_id=product_id, collection_id=collection_id).update(position_in_collection=index + 1)
 
         if success:
-            print("Product order updated successfully!")
+            logger.info("Product order updated successfully!")
         return success
 
     except Exception as e:
-        print(f"Error in async task: {str(e)}")
+        logger.error(f"Error in async task: {str(e)}")
         return False
 
 def pid_extractor(products):
@@ -313,33 +295,33 @@ import json
 @shared_task
 def async_sort_product_order(shop_id, collection_id, algo_id):
     try:
-        print("Async advacne sort product order running")
-        client = Client.objects.get(shop_id=shop_id)
-        print("client is found", client)
-        client_collection = ClientCollections.objects.get(shop_id=shop_id, collection_id=collection_id)
-        print('client_collection found', client_collection)
-        days = client.lookback_period  
-        products = ClientProducts.objects.filter(shop_id=shop_id, collection_id=collection_id).values(
-            "product_id", "product_name", "total_sold_units" , "created_at", "updated_at", "published_at", 
-            "tags", "variant_count", "variant_availability", "total_revenue", "total_inventory", 
-            "sales_velocity","recency_score"
-        )
-
-        print("total products fetched from database :", len(products))
-
-        client_collection = ClientCollections.objects.get(shop_id=shop_id, collection_id=collection_id)
+        logger.info("Async advanced sort product order running")
         
+        client = Client.objects.get(shop_id=shop_id)
+        logger.info(f"Client found: {client}")
+        
+        client_collection = ClientCollections.objects.get(shop_id=shop_id, collection_id=collection_id)
+        logger.info(f"Client collection found: {client_collection}")
+        
+        days = client.lookback_period  
+        
+        products = ClientProducts.objects.filter(shop_id=shop_id, collection_id=collection_id).values(
+            "product_id", "product_name", "total_sold_units", "created_at", "updated_at", "published_at", 
+            "tags", "variant_count", "variant_availability", "total_revenue", "total_inventory", 
+            "sales_velocity", "recency_score"
+        )
+        logger.info(f"Total products fetched from database: {len(products)}")
+
         total_collection_revenue = sum(product['total_revenue'] for product in products)
 
         if client_collection.collection_total_revenue is not None:
-            print(f"Existing total collection revenue found: {client_collection.collection_total_revenue}, overwriting...")
+            logger.info(f"Existing total collection revenue found: {client_collection.collection_total_revenue}, overwriting...")
         else:
-            print("No previous total collection revenue found, saving for the first time...")
+            logger.info("No previous total collection revenue found, saving for the first time...")
 
         client_collection.collection_total_revenue = total_collection_revenue
         client_collection.save()
 
-        
         pinned_product_ids = client_collection.pinned_products
         new_order = []
 
@@ -349,70 +331,66 @@ def async_sort_product_order(shop_id, collection_id, algo_id):
                 pinned_products, ofs_pinned = segregate_pinned_products(pinned_products)
             else:
                 ofs_pinned = []
-            new_order.extend(pinned_products)  #
+            new_order.extend(pinned_products)
         else:
             pinned_products = []
             ofs_pinned = []
         
-        print("products, pinned products  alg alg ho gye ", len(products), len(pinned_products), len(ofs_pinned))
+        logger.info(f"Products and pinned products segregated: {len(products)} products, {len(pinned_products)} pinned, {len(ofs_pinned)} out-of-stock pinned")
 
         if client_collection.out_of_stock_down:
             products, ofs_products = push_out_of_stock_down(products)
         else:
             ofs_products = []
 
-        print(" alg alg ho gye ", len(products), len(pinned_products), len(ofs_pinned), len(ofs_products))
-
+        logger.info(f"Out-of-stock products segregated: {len(products)} products, {len(ofs_pinned)} pinned, {len(ofs_products)} out-of-stock products")
 
         client_algo = ClientAlgo.objects.get(algo_id=algo_id)
-        print("client_algo", client_algo)
+        logger.info(f"Client algorithm found: {client_algo}")
+
         boost_tags = client_algo.boost_tags
         bury_tags = client_algo.bury_tags
         buckets = client_algo.bucket_parameters
         
-        print(buckets)
-        
+        logger.info(f"Boost tags: {boost_tags}, Bury tags: {bury_tags}, Buckets: {buckets}")
+
         boost_tag_products = [product for product in products if any(tag in product["tags"] for tag in boost_tags)]
-        new_order.extend(boost_tag_products) #
+        new_order.extend(boost_tag_products)
 
         products = [product for product in products if product not in boost_tag_products]
 
         bury_tag_products = [product for product in products if any(tag in product["tags"] for tag in bury_tags)]
         products = [product for product in products if product not in bury_tag_products]
-        # print(json.dumps(products, indent=4, default=str))
+
         if isinstance(buckets, dict):
-            buckets = [buckets]  
+            buckets = [buckets]
             
         for bucket in buckets:
-            print("Processing bucket: ", bucket)
+            logger.info(f"Processing bucket: {bucket}")
 
             rule_name = bucket.get("rule_name")
-            rule_params = bucket.get("parameters", {})  
-            capping = rule_params.pop("capping", None)  
+            rule_params = bucket.get("parameters", {})
+            capping = rule_params.pop("capping", None)
 
             sort_function = ALGO_ID_TO_FUNCTION.get(rule_name)
             if sort_function:
-                print(f"Sorting function found: {sort_function}")
+                logger.info(f"Sorting function found for rule: {rule_name}")
 
-    
                 capped_products, uncapped_products = sort_function(products, capping=capping, **rule_params)
 
                 if capped_products:
                     new_order.extend(capped_products)
 
                 products = uncapped_products if uncapped_products else products
-
             else:
-                print(f"No sort function found for rule: {rule_name}")
+                logger.warning(f"No sort function found for rule: {rule_name}")
 
-        
         new_order.extend(bury_tag_products)
         new_order.extend(ofs_pinned)
         new_order.extend(ofs_products)
 
-        print("total products sorted", len(new_order))
+        logger.info(f"Total products sorted: {len(new_order)}")
         
-    
         pid = pid_extractor(new_order)
         success = update_collection_products_order(client.shop_url, client.access_token, collection_id, pid)
 
@@ -420,11 +398,11 @@ def async_sort_product_order(shop_id, collection_id, algo_id):
             ClientProducts.objects.filter(product_id=product_id, collection_id=collection_id).update(position_in_collection=index + 1)
 
         if success:
-            print("Product order updated successfully!")
+            logger.info("Product order updated successfully!")
         return success
 
     except Exception as e:
-        print(f"Error in async task: {str(e)}")
+        logger.error(f"Error in async task: {str(e)}")
         return False
 
 @shared_task
@@ -433,11 +411,14 @@ def sort_active_collections(client_id):
         client = Client.objects.get(shop_id=client_id)
         logger.info(f"Sorting active collections for client {client.shop_id}")
         
-        usage = Usage.object.get(shop_id = client.shop_id)
+        usage = Usage.objects.get(shop_id=client.shop_id)
         subscription = Subscription.objects.get(subscription_id=usage.subscription_id)
-        sorting_plan = SortingPlan.objects.get(plan_id = subscription.plan_id)
+        sorting_plan = SortingPlan.objects.get(plan_id=subscription.plan_id)
+        
         sort_limit = sorting_plan.sort_limit
         available_sort = sort_limit - usage.sorts_count
+
+        logger.info(f"Sort limit: {sort_limit}, available sorts: {available_sort} for client {client.shop_id}")
 
         active_collections = ClientCollections.objects.filter(shop_id=client.shop_id, collection_status=True)
 
@@ -451,25 +432,30 @@ def sort_active_collections(client_id):
             algo_id = collection.algo_id  
 
             logger.info(f"Triggering async sort for collection {collection_id} of client {client.shop_id}")
-
+            
             tasks.append(async_cron_sort_product_order.s(client.shop_id, collection_id, algo_id))
-            # async_sort_product_order.delay(client.shop_id, collection_id, algo_id)
 
         chord(tasks)(calculate_revenue.s(client.shop_id))
-        
+
         logger.info(f"Completed triggering sorting for all active collections of client {client.shop_id}")
 
     except Client.DoesNotExist:
         logger.error(f"Client with id {client_id} does not exist")
+    except Usage.DoesNotExist:
+        logger.error(f"Usage data not found for client {client_id}")
+    except Subscription.DoesNotExist:
+        logger.error(f"Subscription data not found for client {client_id}")
+    except SortingPlan.DoesNotExist:
+        logger.error(f"Sorting plan not found for client {client_id}")
     except Exception as e:
-        logger.error(f"Exception occurred while sorting active collections: {str(e)}")
-    
+        logger.error(f"Exception occurred while sorting active collections for client {client.shop_id}: {str(e)}")
+
 @shared_task
 def calculate_revenue(client_id):
     try:
         total_revenue = ClientCollections.objects.filter(shop_id=client_id).aggregate(
-            total_revenue=models.Sum('collection_total_revenue')
-        )['total_revenue'] or 0  
+            total_revenue=Sum('collection_total_revenue')
+        )['total_revenue'] or 0
 
         today = timezone.now().date()
 
@@ -487,21 +473,27 @@ def calculate_revenue(client_id):
 
     except Exception as e:
         logger.error(f"Exception occurred while calculating revenue for client {client_id}: {str(e)}")
-        
-        
-@shared_task #crawller
+
+
+@shared_task
 def reset_sort_counts():
-    reset_date = timezone.now() - timedelta(days=30)
-    logger.debug("reset_date : ", reset_date)
+    try:
+        reset_date = timezone.now() - timedelta(days=30)
 
+        expired_usages = Usage.objects.filter(created_at__lte=reset_date)
 
-    expired_usages = Usage.objects.filter(created_at__lte=reset_date)
-    logger.debug("expired usages : ", expired_usages)
+        if not expired_usages.exists():
+            logger.info("No expired usages found to reset sort counts.")
+            return
 
-    for usage in expired_usages:
-        logger.debug(f"usage : {usage}")
-        usage.sorts_count = 0
-        # usage.addon_sorts_count = 0
-        usage.created_at = timezone.now()
-        usage.usage_date = timezone.now()  
-        usage.save()    
+        for usage in expired_usages:
+            usage.sorts_count = 0
+            usage.usage_date = timezone.now()  
+            usage.save()
+
+            logger.info(f"Reset sort counts for usage {usage.id} for shop {usage.shop_id}")
+
+        logger.info(f"Successfully reset sort counts for {expired_usages.count()} usages.")
+
+    except Exception as e:
+        logger.error(f"Exception occurred while resetting sort counts: {str(e)}")
