@@ -60,8 +60,19 @@ def test_task():
 @shared_task
 def async_fetch_and_store_collections(shop_id):
     try:
-        client = Client.objects.get(shop_id=shop_id)
+        logger.info(f"Starting async fetch and store collections for shop_id: {shop_id}")
+
+        # Fetch the client data
+        try:
+            client = Client.objects.get(shop_id=shop_id)
+            logger.debug(f"Client found for shop_id: {shop_id}")
+        except Client.DoesNotExist:
+            logger.error(f"Client not found for shop_id: {shop_id}")
+            return {"status": "error", "message": f"Client not found for shop_id {shop_id}"}
+
+        # Fetch collections from Shopify
         collections = fetch_collections(client.shop_url)
+        logger.debug(f"Fetched {len(collections)} collections for shop_id: {shop_id}")
 
         for collection in collections:
             collection_id = int(collection["id"].split("/")[-1])
@@ -69,8 +80,14 @@ def async_fetch_and_store_collections(shop_id):
             products_count = collection["products_count"]
             updated_at = collection["updated_at"]
 
-            default_algo = ClientAlgo.objects.get(algo_name="Promote New")
+            try:
+                default_algo = ClientAlgo.objects.get(algo_name="Promote New")
+                logger.debug(f"Default algorithm found for collection: {collection_name}")
+            except ClientAlgo.DoesNotExist:
+                logger.error(f"Default algorithm 'Promote New' not found.")
+                default_algo = None
 
+            # Create or update the ClientCollections entry
             client_collection, created = ClientCollections.objects.get_or_create(
                 collection_id=collection_id,
                 shop_id=shop_id,
@@ -86,31 +103,36 @@ def async_fetch_and_store_collections(shop_id):
             )
 
             if not created:
+                logger.debug(f"Updating existing collection: {collection_name}")
                 client_collection.collection_name = collection_name
                 client_collection.products_count = products_count
                 client_collection.updated_at = updated_at
                 client_collection.refetch = True
                 client_collection.save()
 
-        print("collections fetched:",len(collections))
+        logger.info(f"Collections fetched and stored for shop_id: {shop_id}, total: {len(collections)}")
         return {"status": "success", "collections_fetched": len(collections)}
 
     except Exception as e:
+        logger.error(f"Error fetching and storing collections for shop_id {shop_id}: {str(e)}")
         return {"status": "error", "message": str(e)}
-
+    
 @shared_task
 def async_fetch_and_store_products(shop_url, shop_id, collection_id, days):
     try:
+        logger.info(f"Starting product fetch for shop_id: {shop_id}, collection_id: {collection_id}, days: {days}")
+
+        # Fetch products by collection
         products = fetch_products_by_collection(shop_url, collection_id, days)
-        print("product fetching ho rhi hehehhe")
+        logger.debug(f"Fetched {len(products)} products from collection_id {collection_id} for shop_id {shop_id}")
+
         total_revenue = 0  
         total_sales = 0
 
         if products:
-            print("Products fetched successfully:", len(products))
+            logger.info(f"Products fetched successfully: {len(products)}")
 
         for product in products:
-            print('product name: ',product.get("title", ""))
             product_id = product.get("id")
             product_name = product.get("title", "")
             image_link = product.get("image")
@@ -118,12 +140,10 @@ def async_fetch_and_store_products(shop_url, shop_id, collection_id, days):
             updated_at = product.get("updated_at", "")
             published_at = product.get("published_at", "")
             total_inventory = product.get("totalInventory", 0)
-            print('total_inventory',total_inventory)
             tags = product.get("tags", [])
             variant_count = product.get("variants_count", 0)
             variant_availability = product.get("variant_availability", 0)
             revenue = product.get("revenue", 0.00)  
-            print('revenue', revenue)
             sales_velocity = product.get("sales_velocity", 0.00)
             total_sold_units = product.get("total_sold_units", 0)
             recency_score = product.get("recency_score", None)
@@ -131,7 +151,9 @@ def async_fetch_and_store_products(shop_url, shop_id, collection_id, days):
             total_revenue += revenue
             total_sales += total_sold_units
 
-            print("client update ho rha database mai boss")
+            logger.debug(f"Updating product in database: {product_name} (ID: {product_id})")
+
+            # Update or create ClientProducts entry
             ClientProducts.objects.update_or_create(
                 product_id=product_id,
                 defaults={
@@ -153,16 +175,17 @@ def async_fetch_and_store_products(shop_url, shop_id, collection_id, days):
                 }
             )
 
-        # Update the total revenue and total sales in the ClientCollections model
+        # Update total revenue and total sales in the ClientCollections model
         ClientCollections.objects.filter(collection_id=collection_id, shop_id=shop_id).update(
-            collection_total_revenue = total_revenue,
-            collection_sold_units = total_sales
+            collection_total_revenue=total_revenue,
+            collection_sold_units=total_sales
         )
 
+        logger.info(f"Product fetch and store completed for shop_id: {shop_id}, collection_id: {collection_id}")
         return {"status": "success", "products_fetched": len(products), "total_revenue": total_revenue}
     
     except Exception as e:
-        print(f"Error storing products: {str(e)}")
+        logger.error(f"Error storing products for shop_id {shop_id}, collection_id {collection_id}: {str(e)}")
         return {"status": "error", "message": str(e)}
 
 @shared_task
