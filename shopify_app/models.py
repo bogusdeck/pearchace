@@ -112,6 +112,7 @@ class ClientCollections(models.Model):
     refetch = models.BooleanField(default=True)
     collection_total_revenue = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
     collection_sold_units = models.IntegerField(default=0)
+    never_active = models.BooleanField(default=True)
 
     class Meta:
         unique_together = ('shop', 'collection_id')  

@@ -470,10 +470,9 @@ def last_active_collections(request):
             )
 
         try:
-            # Use select_related to minimize queries to fetch associated ClientAlgo data
             collections = ClientCollections.objects.filter(
                 shop_id=shop_id, status=True
-            ).order_by("-sort_date")[:5].select_related("algo_id")
+            ).order_by("-sort_date")[:5].select_related("algo")
 
             collections_data = [
                 {
@@ -481,7 +480,7 @@ def last_active_collections(request):
                     "collection_name": collection.collection_name,
                     "product_count": collection.products_count,
                     "sort_date": collection.sort_date,
-                    "algo_name": collection.algo_id.algo_name,  
+                    "algo_name": collection.algo.algo_name,  
                 }
                 for collection in collections
             ]
@@ -638,12 +637,32 @@ def get_client_collections(request, client_id):  # working and tested
                     {"error": "Client ID mismatch"}, status=status.HTTP_403_FORBIDDEN
                 )
 
-            client_collections = ClientCollections.objects.filter(
-                shop_id=shop_id
-            ).order_by("collection_id")
+            # Get filter and pageSize parameters from request
+            filter_param = int(request.query_params.get("filter", 0))  # Default to 0
+            page_size = int(request.query_params.get("pageSize", 10))  # Default page size is 10
+
+            # Filter collections based on filter_param
+            if filter_param == 1:
+                client_collections = ClientCollections.objects.filter(
+                    shop_id=shop_id, status=True  # Active collections only
+                )
+            elif filter_param == 2:
+                client_collections = ClientCollections.objects.filter(
+                    shop_id=shop_id, status=False  # Inactive collections only
+                )
+            elif filter_param == 3:
+                client_collections = ClientCollections.objects.filter(
+                    shop_id=shop_id, never_active=True  # Collections where never_active is True
+                )
+            else:
+                client_collections = ClientCollections.objects.filter(shop_id=shop_id)  # All collections
+
+            client_collections = client_collections.order_by("collection_id")
             logger.info("Fetched %d collections for client %s", client_collections.count(), client_id)
 
+            # Paginate with custom page size
             paginator = ClientCollectionsPagination()
+            paginator.page_size = page_size
             paginated_collections = paginator.paginate_queryset(client_collections, request)
 
             collections_data = []
@@ -806,6 +825,7 @@ def update_collection(request, collection_id):  # working not tested
         # Update status if provided
         if status_value is not None:
             collection.status = status_value
+            collection.never_active = False
             updated = True
             logger.info("Updated status for collection %s to %s", collection_id, status_value)
 
