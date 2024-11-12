@@ -427,7 +427,6 @@ def activate_recurring_charge(shop_url, shop_id, access_token, charge_id):
         logger.exception(f"Error occurred while activating recurring charge for shop_id {shop_id} with charge_id {charge_id}: {e}")
         return False
 
-
 def cancel_active_recurring_charges(shop_url, access_token):
     shopify_graphql_url = f"https://{shop_url}/admin/api/{os.environ.get('SHOPIFY_API_VERSION')}/graphql.json"
     headers = {
@@ -514,51 +513,41 @@ def cancel_active_recurring_charges(shop_url, access_token):
     return True
 
 
-@api_view(['GET'])
+@api_view(['POST'])
 @permission_classes([AllowAny])
-@csrf_exempt    
-def handle_app_uninstall(request): # need changes
-    auth_header = request.headers.get('Authorization', None)
-    if auth_header is None:
-        logger.error('Authorization header missing')
-        return Response({'error': 'Authorization header missing'}, status=status.HTTP_401_UNAUTHORIZED)
+@csrf_exempt
+def handle_app_uninstall(request):
+    shop_id = request.data.get('shop_id', None)
+    if not shop_id:
+        logger.error('shop_id missing in request data')
+        return Response({'error': 'shop_id missing'}, status=status.HTTP_400_BAD_REQUEST)
     
     try:
-        token = auth_header.split(' ')[1]
-        jwt_auth = JWTAuthentication()
-
-        validated_token = jwt_auth.get_validated_token(token)
-        user = jwt_auth.get_user(validated_token)
-        
-        shop_url = user.shop_url
-        access_token = user.access_token
-        if not shop_url:
-            logger.error('Shop URL not found in session for user: %s', user)
-            return Response({'error': 'Shop url not found in session'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Ensure access token is retrieved correctly
+        client = Client.objects.get(shop_id=shop_id)
+        shop_url = client.shop_url
         access_token = get_access_token(shop_url)
+
+        if not shop_url:
+            logger.error('Shop URL not found for shop_id: %s', shop_id)
+            return Response({'error': 'Shop URL not found'}, status=status.HTTP_400_BAD_REQUEST)
+        
         if not access_token:
             logger.error('Access token not found for shop_url: %s', shop_url)
-            return Response({'error': 'Access token not found in session'}, status=status.HTTP_400_BAD_REQUEST)   
+            return Response({'error': 'Access token not found'}, status=status.HTTP_400_BAD_REQUEST)   
 
-        # Cancel active recurring charges using GraphQL
         is_cancelled = cancel_active_recurring_charges(shop_url, access_token)
-
+        
         if is_cancelled:
             logger.info('Successfully handled app uninstall for shop_url: %s', shop_url)
-            return Response({'status': 'App uninstall handled successfully'}, status=200)
+            return Response({'status': 'App uninstall handled successfully'}, status=status.HTTP_200_OK)
         else:
             logger.error('Failed to cancel recurring charges for shop_url: %s', shop_url)
             return Response({'error': 'Failed to cancel recurring charges'}, status=status.HTTP_400_BAD_REQUEST)
         
-    except InvalidToken:
-        logger.error('Invalid token provided during app uninstall')
-        return Response({'error': 'Invalid token'}, status=status.HTTP_401_UNAUTHORIZED)
     except Exception as e:
         logger.exception('Error occurred while handling app uninstall: %s', str(e))
-        return Response({'error': str(e)}, status=400)
-
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    
       
 #######################################################################################################################################
 #  ██████  ███    ██ ███████       ████████ ██ ███    ███ ███████     ██████   █████  ██    ██ ███    ███ ███████ ███    ██ ████████ 
