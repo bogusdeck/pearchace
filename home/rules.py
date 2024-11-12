@@ -218,6 +218,11 @@ def promote_bestsellers(products, days: int, high_to_low: bool = True, capping: 
 def promote_high_variant_availability(products, days: int, high_to_low: bool = True, capping: int = None):
     return variant_availability_ratio(products, days=days, high_to_low=high_to_low, capping=capping)
 
+# def promote_occasian_based_promotions(products, days:int, high_to_low:bool=True, capping:int=None):
+#     return 1
+
+def promote_discounted_products(products, days:int, high_to_low:bool=True, capping:int=None):
+    return 1
 
 import random
 from typing import List, Dict, Optional, Tuple

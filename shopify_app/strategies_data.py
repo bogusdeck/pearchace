@@ -6,7 +6,7 @@ PRIMARY_STRATEGIES = [
             "rule_name": "new_products",
             "parameters": {
                 "days": 30,
-                "date_type": 0,  # Created date
+                "date_type": 0,  
                 "capping": None
             }
         },

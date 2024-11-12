@@ -202,6 +202,7 @@ def fetch_products_by_collection(shop_url, collection_id, days):
                                     node {{
                                         id
                                         price
+                                        compareAtPrice
                                         inventoryQuantity
                                     }}
                                 }}
@@ -219,7 +220,6 @@ def fetch_products_by_collection(shop_url, collection_id, days):
         variables = {"after": cursor} if cursor else {}
         response = requests.post(url, json={"query": query, "variables": variables}, headers=headers)
         print("response done")
-
 
         if response.status_code == 200:
             data = response.json()
@@ -253,12 +253,14 @@ def fetch_products_by_collection(shop_url, collection_id, days):
         sales_velocity = calculate_sales_velocity_from_orders(orders, product["node"]["id"], days)
         total_sold_units =  calculate_sales_velocity_from_orders(orders, product["node"]["id"], days, return_units=True)
 
-        # try:
-        #     client_product = ClientProducts.objects.get(product_id=product_id, shop=client)
-        #     client_product.recency_score = recency_score
-        #     client_product.save()
-        # except ClientProducts.DoesNotExist:
-        #     print(f"Product {product_id} not found in ClientProducts. Skipping update.")
+        discount_percentage = 0.0
+        for variant in product["node"]["variants"]["edges"]:
+            price = float(variant["node"]["price"])
+            compare_at_price = float(variant["node"].get("compareAtPrice") or 0)
+            print(price , compare_at_price)
+            if compare_at_price > price:
+                discount_percentage = ((compare_at_price - price) / compare_at_price) * 100
+                break  
 
         products_data.append({
             "id": product_id,
@@ -278,6 +280,8 @@ def fetch_products_by_collection(shop_url, collection_id, days):
                 for variant in product["node"]["variants"]["edges"]
             ),
             "recency_score": recency_score,
+            "discount_absolute": compare_at_price-price,
+            "discount_percentage": discount_percentage
         })
 
     return products_data

@@ -139,10 +139,12 @@ class ClientProducts(models.Model):
     total_sold_units = models.IntegerField(default=0)
     position_in_collection = models.IntegerField(default=0)
     recency_score = models.FloatField(default=0)
-
+    discount_absolute = models.FloatField(default=0.0, null=True)
+    discount_percentage = models.FloatField(default=0.0, null=True)  
 
     def __str__(self):
         return f"Product {self.product_name} (ID: {self.product_id}) for shop_id {self.shop_id}"
+
     
 #new
 class ClientAlgo(models.Model):

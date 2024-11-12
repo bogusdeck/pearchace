@@ -822,19 +822,16 @@ def update_collection(request, collection_id):  # working not tested
         algo_id = request.data.get("algo_id")
         updated = False
 
-        # Update status if provided
         if status_value is not None:
             collection.status = status_value
             collection.never_active = False
             updated = True
             logger.info("Updated status for collection %s to %s", collection_id, status_value)
 
-        # Update algorithm if provided
         if algo_id is not None:
             try:
                 algo = ClientAlgo.objects.get(algo_id=algo_id)
                 collection.algo = algo
-                updated = True
                 logger.info("Updated algo for collection %s to %s", collection_id, algo_id)
             except ClientAlgo.DoesNotExist:
                 logger.error("Algorithm with ID %s not found", algo_id)
@@ -844,7 +841,6 @@ def update_collection(request, collection_id):  # working not tested
 
         days = client.lookback_period
 
-        # Save the collection and initiate product fetching if status is active
         if updated:
             collection.save()
             if collection.status:

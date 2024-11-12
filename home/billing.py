@@ -517,7 +517,7 @@ def cancel_active_recurring_charges(shop_url, access_token):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 @csrf_exempt    
-def handle_app_uninstall(request):
+def handle_app_uninstall(request): # need changes
     auth_header = request.headers.get('Authorization', None)
     if auth_header is None:
         logger.error('Authorization header missing')

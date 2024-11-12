@@ -143,7 +143,9 @@ def async_fetch_and_store_products(shop_url, shop_id, collection_id, days):
             sales_velocity = product.get("sales_velocity", 0.00)
             total_sold_units = product.get("total_sold_units", 0)
             recency_score = product.get("recency_score", None)
-            
+            discount_percentage = product.get('discount_percentage')
+            discount_absolute = product.get('discount_absolute')
+
             total_revenue += revenue
             total_sales += total_sold_units
 
@@ -166,7 +168,9 @@ def async_fetch_and_store_products(shop_url, shop_id, collection_id, days):
                     'total_inventory': total_inventory,
                     'total_sold_units': total_sold_units,
                     'sales_velocity': float(sales_velocity),
-                    'recency_score': recency_score
+                    'recency_score': recency_score,
+                    'discount_absolute':discount_absolute,
+                    'discount_percentage': discount_percentage  
                 }
             )
 
