@@ -513,11 +513,11 @@ def cancel_active_recurring_charges(shop_url, access_token):
     return True
 
 
-@api_view(['POST'])
+@api_view(['GET'])
 @permission_classes([AllowAny])
 @csrf_exempt
 def handle_app_uninstall(request):
-    shop_id = request.data.get('shop_id', None)
+    shop_id = request.GET.get('shop_id', None)
     if not shop_id:
         logger.error('shop_id missing in request data')
         return Response({'error': 'shop_id missing'}, status=status.HTTP_400_BAD_REQUEST)

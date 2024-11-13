@@ -36,7 +36,7 @@ urlpatterns = [
     path('api/billing/confirm/', confirm_billing, name='confirm_billing'),
     path('api/billing/addon-sorts/', purchase_additional_sorts, name='additional_sorts'),
     path('api/billing/extra-sort-confirm/', extra_sort_confirm, name='extra_sorts_confirm'),
-    path('api/billing/uninstall/', handle_app_uninstall, name='handle_app_uninstall'),   
+    path('webhook/uninstall/', handle_app_uninstall, name='handle_app_uninstall'),   
 
     # new apis
     path('api/preview-products/', views.preview_products, name='preview-products'),

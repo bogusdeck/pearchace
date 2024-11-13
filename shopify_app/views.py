@@ -51,6 +51,50 @@ def login(request):
     logger.debug(f"Generated permission URL: {permission_url}")
     return redirect(permission_url)
 
+    
+def register_app_uninstall_webhook(shop_url, access_token):
+    base_url = os.getenv("BACKEND_URL")
+    if not base_url:
+        logger.error("BASE_URL is not set in environment variables.")
+        return
+    
+    url = f"https://{shop_url}/admin/api/2023-07/graphql.json"
+    headers = {
+        "Content-Type": "application/json",
+        "X-Shopify-Access-Token": access_token,
+    }
+    
+    callback_url = f"{base_url}/webhook/app_uninstall/"
+    
+    query = f"""
+    mutation {{
+        webhookSubscriptionCreate(
+            topic: APP_UNINSTALLED
+            webhookSubscription: {{
+                callbackUrl: "{callback_url}"
+                format: JSON
+            }}
+        ) {{
+            userErrors {{
+                field
+                message
+            }}
+            webhookSubscription {{
+                id
+            }}
+        }}
+    }}
+    """
+    
+    response = requests.post(url, json={"query": query}, headers=headers)
+    data = response.json()
+    logger.debug(data)
+    
+    if data.get("data") and not data["data"]["webhookSubscriptionCreate"]["userErrors"]:
+        logger.info("Successfully registered app/uninstall webhook.")
+    else:
+        logger.error("Failed to register app/uninstall webhook: %s", data)
+
 def finalize(request):
     logger.info("Finalizing OAuth callback from Shopify")
     api_secret = apps.get_app_config('shopify_app').SHOPIFY_API_SECRET
@@ -87,12 +131,15 @@ def finalize(request):
             "shop_url": shop_url,
             "access_token": access_token
         }
+        logger.debug(f"finalization for shop url {shop_url}, registering of shop_url")
+        register_app_uninstall_webhook(shop_url, access_token)
 
         return redirect('root_path')
 
     except Exception as e:
         logger.exception("An error occurred during Shopify login finalization.")
         return JsonResponse({'error': f'Could not log in: {str(e)}'}, status=500)
+
 
 @shop_login_required
 @api_view(['GET'])
