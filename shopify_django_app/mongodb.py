@@ -9,7 +9,10 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework import status
+from shopify_app.models import History
 
+import logging
+logger = logging.getLogger(__name__)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -83,3 +86,70 @@ def status_list(request):
 
     except PyMongoError as e:   
         return JsonResponse({'error': str(e)}, status=500)
+    
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def history_status(request):
+    auth_header = request.headers.get("Authorization")
+    
+    if not auth_header:
+        logger.error("Authorization header missing")
+        return Response(
+            {"error": "Authorization header missing"},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    try:
+        try:
+            token = auth_header.split(" ")[1]
+        except IndexError:
+            logger.error("Invalid Authorization header format")
+            return Response(
+                {"error": "Invalid Authorization header format"},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+        
+        jwt_auth = JWTAuthentication()
+        validated_token = jwt_auth.get_validated_token(token)
+        user = jwt_auth.get_user(validated_token)
+
+        shop_id = user.shop_id
+        if not shop_id:
+            logger.warning("Shop ID not found in JWT token for user %s", user)
+            return Response(
+                {"error": "Shop ID not found in session"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Retrieve history data for the shop
+        history_queryset = History.objects.filter(shop_id=shop_id).order_by('-requested_at')
+        logger.info("History data retrieved for shop_id %s", shop_id)
+        
+        # Paginate the history data
+        paginator = PageNumberPagination()
+        paginator.page_size = request.query_params.get('page_size', 10)
+        paginated_queryset = paginator.paginate_queryset(history_queryset, request)
+        logger.info("Paginated history data for shop_id %s with page_size %s", shop_id, paginator.page_size)
+        
+        history_data = [
+            {
+                "requested_at": history.requested_at,
+                "started_at": history.started_at,
+                "ended_at": history.ended_at,
+                "requested_by": history.requested_by,
+                "product_count": history.product_count,
+                "status": history.status,
+                "collection_name": history.collection_name,
+            }
+            for history in paginated_queryset
+        ]
+        
+        logger.info("History data serialization completed for shop_id %s", shop_id)
+        return paginator.get_paginated_response(history_data)
+
+    except Exception as e:
+        logger.exception("Unexpected error in status API")
+        return Response(
+            {'error': 'An unexpected error occurred. Please try again later.'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )

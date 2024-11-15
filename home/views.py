@@ -142,6 +142,8 @@ def index(request):
                 "default_algo": default_algo
             },
         )
+    
+        newcomer = "false"
 
         if created:
             logger.info("New client created, setting default values.")
@@ -152,6 +154,7 @@ def index(request):
             client.custom_stop_time = None
             client.custom_frequency_in_hours = None
             client.stock_location = 'all'  
+            newcomer = "true"
             
         client.save()
         
@@ -163,7 +166,7 @@ def index(request):
         logger.debug(f"Frontend URL: {frontend_url}")
         logger.debug(f"Generated access token: {access_token}")
         
-        redirect_url = f"{frontend_url}?access_token={access_token}&refresh_token={refresh_token}&shop_url={shop_url}"
+        redirect_url = f"{frontend_url}?access_token={access_token}&refresh_token={refresh_token}&shop_url={shop_url}&created={newcomer}"
         logger.info("Redirecting to frontend with tokens and shop URL.")
         
         return redirect(redirect_url)

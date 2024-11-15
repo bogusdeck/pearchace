@@ -1,7 +1,7 @@
 from django.urls import path
 from . import views
 from .views import customer_data_request, customer_data_erasure, shop_data_erasure
-from shopify_django_app.mongodb import faq_list, test_mongodb_connection,status_list
+from shopify_django_app.mongodb import faq_list, test_mongodb_connection,status_list, history_status
 
 
 urlpatterns = [
@@ -18,5 +18,6 @@ urlpatterns = [
     # FAQs
     path('faqs/', faq_list, name='faq_list'),
     path('test-mongodb/', test_mongodb_connection,name='test_mongo'),
-    path('status/', status_list, name='fake_status_list'),
+    # path('status/', status_list, name='fake_status_list'),
+    path('history-status/',history_status, name="history_status")
 ]
