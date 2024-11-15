@@ -252,3 +252,24 @@ class BillingTokens(models.Model):
 
     def is_expired(self):
         return timezone.now() > self.expiration_time
+
+
+class History(models.Model):
+    STATUS_CHOICES = [
+        ('done', 'Done'),
+        ('pending', 'Pending'),
+        ('active', 'Active'),
+    ]
+    
+    id = models.AutoField(primary_key=True)
+    shop_id = models.ForeignKey('Client',to_field='shop_id',on_delete=models.CASCADE)
+    requested_at = models.DateTimeField(auto_now_add=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    ended_at = models.DateTimeField(null=True, blank=True)
+    requested_by = models.CharField(max_length=255)
+    product_count = models.PositiveIntegerField()
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
+    collection_name = models.CharField(max_length=255)
+
+    def __str__(self):
+        return f"{self.collection_name} - {self.status} - {self.requested_by}"
