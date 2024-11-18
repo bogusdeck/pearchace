@@ -23,7 +23,8 @@ from shopify_app.models import (
     ClientCollections,
     ClientProducts,
     ClientGraph,
-    ClientAlgo
+    ClientAlgo,
+    History
 )
 from shopify_app.api import (
     fetch_collections,
@@ -1498,8 +1499,17 @@ def advance_config(request):
 
         logger.info("Initiating advanced sorting for shop_id %s, collection_id %s, algo_id %s", shop_id, collection_id, algo_id)
 
+        history_entry = History.objects.create(
+            shop_id = client,
+            requested_by = "Manual",
+            product_count=ClientProducts.objects.filter(shop_id=shop_id,collection_id=collection_id).count(),
+            status='Active',
+            collection_name=client_collection.collection_name
+        )
+
+    
         # Call to async task for sorting
-        task = async_sort_product_order.delay(shop_id, collection_id, algo_id)
+        task = async_sort_product_order.delay(shop_id, collection_id, algo_id, history_entry.id)
 
         logger.info("Sorting initiated with advanced system, task_id: %s", task.id)
 
@@ -1858,10 +1868,18 @@ def sort_now(request):
                 {"error": "No available sorts remaining for today"},
                 status=status.HTTP_403_FORBIDDEN,
             )
+        
+        history_entry = History.objects.create(
+            shop_id = client,
+            requested_by = "Manual",
+            product_count=ClientProducts.objects.filter(shop_id=shop_id,collection_id=collection_id).count(),
+            status='Active',
+            collection_name=ClientCollections.objects.get(collection_id=collection_id).collection_name,
+        ) 
 
-        async_sort_product_order.delay(shop_id, collection_id, algo_id)
+        async_sort_product_order.delay(shop_id, collection_id, algo_id,history_entry.id)
         logger.info("Sorting initiated for shop_id %s, collection_id %s, algo_id %s", shop_id, collection_id, algo_id)
-
+        
         return Response({"message": "Sorting initiated"}, status=status.HTTP_202_ACCEPTED)
 
     except InvalidToken:

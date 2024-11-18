@@ -2,8 +2,8 @@
 from celery import shared_task, chord
 from django.db import transaction
 from django.utils import timezone
-from datetime import timedelta
-from .models import Client, ClientCollections, ClientProducts, ClientAlgo, ClientGraph , Usage, Subscription, SortingPlan
+from datetime import datetime, timedelta
+from .models import Client, ClientCollections, ClientProducts, ClientAlgo, ClientGraph , Usage, Subscription, SortingPlan, History
 from .api import (
     fetch_collections,
     fetch_products_by_collection,
@@ -186,7 +186,7 @@ def async_fetch_and_store_products(shop_url, shop_id, collection_id, days):
         logger.error(f"Error storing products for shop_id {shop_id}, collection_id {collection_id}: {str(e)}")
         return {"status": "error", "message": str(e)}
 
-@shared_task
+@shared_task #not ussing i guess
 def async_cron_sort_product_order(shop_id, collection_id, algo_id):
     try:
         logger.info(f"Starting advanced sort for shop_id: {shop_id}, collection_id: {collection_id}, algo_id: {algo_id}")
@@ -196,6 +196,7 @@ def async_cron_sort_product_order(shop_id, collection_id, algo_id):
         
         client_collection = ClientCollections.objects.get(shop_id=shop_id, collection_id=collection_id)
         logger.info(f"Client collection found: {client_collection}")
+        
 
         days = client.lookback_period
         products = fetch_products_by_collection(client.shop_url, collection_id, days)
@@ -297,9 +298,14 @@ def pid_extractor(products):
 import json
 
 @shared_task
-def async_sort_product_order(shop_id, collection_id, algo_id):
+def async_sort_product_order(shop_id, collection_id, algo_id, history_entry_id):
     try:
         logger.info("Async advanced sort product order running")
+        
+        history_entry = History.objects.get(id=history_entry_id)
+        
+        history_entry.started_at = datetime.now()
+        history_entry.save()
         
         client = Client.objects.get(shop_id=shop_id)
         logger.info(f"Client found: {client}")
@@ -403,10 +409,22 @@ def async_sort_product_order(shop_id, collection_id, algo_id):
 
         if success:
             logger.info("Product order updated successfully!")
+            history_entry.status = 'Done'
+            history_entry.product_count = ClientProducts.objects.filter(shop_id=shop_id,collection_id=collection_id).count()
+        else:
+            history_entry.status = 'Failed'
+            
+        history_entry.ended_at = datetime.now()
+        history_entry.save()    
+        
         return success
 
     except Exception as e:
         logger.error(f"Error in async task: {str(e)}")
+        history_entry.status = 'Failed'
+        history_entry.ended_at = datetime.now()
+        history_entry.save()
+        
         return False
 
 @shared_task
@@ -414,6 +432,14 @@ def sort_active_collections(client_id):
     try:
         client = Client.objects.get(shop_id=client_id)
         logger.info(f"Sorting active collections for client {client.shop_id}")
+        
+        history_entry = History.objects.create(
+            shop_id = client,
+            requested_by='cron job',
+            product_count=0,
+            collection_name='All active collections',
+            status = 'pending'       
+        )
         
         usage = Usage.objects.get(shop_id=client.shop_id)
         subscription = Subscription.objects.get(subscription_id=usage.subscription_id)
@@ -428,6 +454,9 @@ def sort_active_collections(client_id):
 
         if not active_collections.exists():
             logger.info(f"No active collections found for client {client.shop_id}")
+            history_entry.status = "done"
+            history_entry.ended_at = datetime_now()
+            history_entry.save()
             return
 
         tasks = []
@@ -437,7 +466,7 @@ def sort_active_collections(client_id):
 
             logger.info(f"Triggering async sort for collection {collection_id} of client {client.shop_id}")
             
-            tasks.append(async_cron_sort_product_order.s(client.shop_id, collection_id, algo_id))
+            tasks.append(async_cron_sort_product_order.s(client.shop_id, collection_id, algo_id, history_entry.id))
 
         chord(tasks)(calculate_revenue.s(client.shop_id))
 
@@ -445,14 +474,29 @@ def sort_active_collections(client_id):
 
     except Client.DoesNotExist:
         logger.error(f"Client with id {client_id} does not exist")
+        history_entry.status = "failed"
+        history_entry.ended_at = datetime.now()
+        history_entry.save()
     except Usage.DoesNotExist:
         logger.error(f"Usage data not found for client {client_id}")
+        history_entry.status = "failed"
+        history_entry.ended_at = datetime.now()
+        history_entry.save()
     except Subscription.DoesNotExist:
         logger.error(f"Subscription data not found for client {client_id}")
+        history_entry.status = "failed"
+        history_entry.ended_at = datetime.now()
+        history_entry.save()
     except SortingPlan.DoesNotExist:
         logger.error(f"Sorting plan not found for client {client_id}")
+        history_entry.status = "failed"
+        history_entry.ended_at = datetime.now()
+        history_entry.save()
     except Exception as e:
         logger.error(f"Exception occurred while sorting active collections for client {client.shop_id}: {str(e)}")
+        history_entry.status = "failed"
+        history_entry.ended_at = datetime.now()
+        history_entry.save()
 
 @shared_task
 def calculate_revenue(client_id):

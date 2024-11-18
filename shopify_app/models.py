@@ -259,6 +259,7 @@ class History(models.Model):
         ('done', 'Done'),
         ('pending', 'Pending'),
         ('active', 'Active'),
+        ('failed', 'Failed')
     ]
     
     id = models.AutoField(primary_key=True)
