@@ -20,3 +20,4 @@ django-storages
 django-celery-beat
 flower
 django-celery-results
+sendgrid

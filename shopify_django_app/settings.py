@@ -168,6 +168,9 @@ USE_TZ = True
 SHOPIFY_API_KEY = os.environ.get('SHOPIFY_API_KEY')
 SHOPIFY_API_SECRET = os.environ.get('SHOPIFY_API_SECRET')
 
+SENDGRID_API_KEY = os.environ.get('SENDGRID_API_KEY')
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL')
+
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 

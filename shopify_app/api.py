@@ -152,7 +152,7 @@ def fetch_products_by_collection_with_img(shop_url, collection_id): #will remove
 
 ##########################
 def fetch_products_by_collection(shop_url, collection_id, days):
-    print("api running start")
+    logger.debug("fetch products api running start")
     client = _get_client(shop_url)
     if not client:
         return []
@@ -219,6 +219,7 @@ def fetch_products_by_collection(shop_url, collection_id, days):
 
         variables = {"after": cursor} if cursor else {}
         response = requests.post(url, json={"query": query, "variables": variables}, headers=headers)
+        logger.debug(request.json())
         print("response done")
 
         if response.status_code == 200:
@@ -291,7 +292,7 @@ def fetch_orders(shop_url, days, headers):
     Fetches orders within a specified date range using Shopify's GraphQL API.
     """
 
-    print("orders fetching start")
+    logger.debug("orders fetching start")
     api_version = apps.get_app_config("shopify_app").SHOPIFY_API_VERSION
     url = f"https://{shop_url}/admin/api/{api_version}/graphql.json"
     end_date = timezone.now()
@@ -338,12 +339,14 @@ def fetch_orders(shop_url, days, headers):
         """
 
         response = requests.post(url, json={"query": query}, headers=headers)
+        logger.debug(response.json())
         
         if response.status_code != 200:
             print(f"Error fetching orders: {response.status_code} - {response.text}")
             return []
 
         data = response.json().get("data", {}).get("orders", {})
+        logger.debug(data)
         has_next_page = data.get("pageInfo", {}).get("hasNextPage", False)
         after_cursor = data["edges"][-1]["cursor"] if has_next_page else None
         orders.extend(data["edges"])
@@ -506,7 +509,39 @@ def update_collection_products_order(
         url = f"https://{shop_url}/admin/api/{api_version}/graphql.json"
         collection_global_id = f"gid://shopify/Collection/{collection_id}"
 
-        mutation = """
+        set_manual_sort_mutation = """
+        mutation setSortOrder($id: ID!, $sortOrder: CollectionRuleSetSortOrder!) {
+            collectionRuleSetSortOrderUpdate(id: $id, sortOrder: $sortOrder) {
+                collection {
+                    id
+                }
+                userErrors {
+                    field
+                    message
+                }
+            }
+        }
+        """
+        variables = {"id": collection_global_id, "sortOrder": "MANUAL"}
+        sort_response = requests.post(
+            url, json={"query": set_manual_sort_mutation, "variables": variables}, headers=headers
+        )
+        if sort_response.status_code == 200:
+            sort_result = sort_response.json()
+            logger.debug(sort_result)
+            sort_errors = (
+                sort_result.get("data", {})
+                .get("collectionRuleSetSortOrderUpdate", {})
+                .get("userErrors", [])
+            )
+            if sort_errors:
+                print(f"Failed to set sort order to manual: {sort_errors}")
+                return False
+        else:
+            print(f"Failed to set sort order: {sort_response.status_code} - {sort_response.text}")
+            return False
+
+        reorder_mutation = """
         mutation updateProductOrder($id: ID!, $moves: [MoveInput!]!) {
             collectionReorderProducts(id: $id, moves: $moves) {
                 userErrors {
@@ -516,7 +551,6 @@ def update_collection_products_order(
             }
         }
         """
-        
         moves = [
             {
                 "id": f"gid://shopify/Product/{product_id}",
@@ -525,40 +559,37 @@ def update_collection_products_order(
             for position, product_id in enumerate(sorted_product_ids)
         ]
         variables = {"id": collection_global_id, "moves": moves}
-        response = requests.post(
-            url, json={"query": mutation, "variables": variables}, headers=headers
+        reorder_response = requests.post(
+            url, json={"query": reorder_mutation, "variables": variables}, headers=headers
         )
 
-        if response.status_code == 200:
-            result = response.json()
-            errors = (
-                result.get("data", {})
+        if reorder_response.status_code == 200:
+            reorder_result = reorder_response.json()
+            reorder_errors = (
+                reorder_result.get("data", {})
                 .get("collectionReorderProducts", {})
                 .get("userErrors", [])
             )
 
-            if not errors:
+            if not reorder_errors:
+                # Update usage data
                 try:
-                    # Retrieve the client by shop URL
                     client = Client.objects.get(shop_url=shop_url)
-                    # Fetch the existing usage entry for that client
                     usage = Usage.objects.get(shop=client)
 
-                    # Update the sorts count and save the usage entry
                     with transaction.atomic():
                         usage.sorts_count += 1
-                        usage.usage_date = timezone.now().date() 
+                        usage.usage_date = timezone.now().date()
                         usage.save()
-                        
                 except Client.DoesNotExist:
                     print(f"Client with shop_url {shop_url} does not exist.")
                 except Usage.DoesNotExist:
                     print(f"Usage data for client {client.id} does not exist.")
                 return True
             else:
-                print(f"User errors: {errors}")
+                print(f"User errors: {reorder_errors}")
         else:
-            print(f"Failed to reorder products: {response.status_code} - {response.text}")
+            print(f"Failed to reorder products: {reorder_response.status_code} - {reorder_response.text}")
         return False
 
     except Exception as e:

@@ -15,6 +15,7 @@ from django.views.decorators.http import require_GET
 import shopify
 from django.views.decorators.csrf import csrf_protect
 from django.core.exceptions import ObjectDoesNotExist
+from .email import send_welcome_email
 from shopify_app.models import (
     Client,
     Usage,
@@ -156,6 +157,11 @@ def index(request):
             client.custom_frequency_in_hours = None
             client.stock_location = 'all'  
             newcomer = "true"
+            status, body, headers = send_welcome_email(email, name)
+            if status == 202:
+                logger.info(f"Welcome Email sent Successfully to {email}")
+            else:
+                logger.error(f"Failed to send welcome email to {email}")
             
         client.save()
         
