@@ -338,8 +338,7 @@ def fetch_orders(shop_url, days, headers):
         """
 
         response = requests.post(url, json={"query": query}, headers=headers)
-        logger.debug(response.json())
-        
+    
         if response.status_code != 200 or "errors" in response.json():
             logger.error(f"Error fetching orders: {response.json().get('errors')}")
             return []
