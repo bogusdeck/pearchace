@@ -6,6 +6,8 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
+admin = "tanish.vashisth@xtagelabs.com"
+
 def send_welcome_email(to_email, user_name):
     logger.info(f"Preparing to send welcome email to {to_email} for user {user_name}")
     message = Mail(
@@ -32,11 +34,11 @@ def order_not_found(errorr,user_name):
     logger.info(f"Preparing to send warning mail to admin ")
     message = Mail(
         from_mail = settings.DEFAULT_FROM_EMAIL,
-        to_email = "samanyu.chopra@xtagelabs.com",
+        to_email = admin,
         subject = "We are not able to get the orders from the shopify",
         html_content=f"""
         <h1> Our app PEARCH is not able to fetch orders from shopify {user_name}<h1>
-        <p> having this errro <p>
+        <p> having this error <p>
         <p> {errorr} <p>
         """
     )
@@ -49,3 +51,26 @@ def order_not_found(errorr,user_name):
     except Exception as e:
         logger.error(f"Error sending order not found email to admin : {e}")
         return 500, None, None
+    
+def products_not_found(errorr,user_name):
+    logger.info(f"Preparing to send warning mail to admin")
+    message = Mail(
+        from_mail = settings.DEFAULT_FROM_EMAIL,
+        to_email = admin,
+        subject = "We are not able to get the products from the shopify",
+        html_content=f"""
+        <h1> Our app PEARCH is not able to fetch products from shopify {user_name}<h1>
+        <p> having this error <p>
+        <p> {errorr} <p>
+        """
+    )
+    try:
+        sg = SendGridAPIClient(settings.SENDGRID_API_KEY)
+        logger.debug("sending error logs to the admin")
+        response = sg.send(message)
+        logger.info(f"email sent successful to admin. Status code: {response.status_code}")
+        return response.status_code, response.body, response.headers
+    except Exception as e:
+        logger.error(f"Error sending products not found email to admin : {e}")
+        return 500, None, None
+    

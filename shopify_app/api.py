@@ -219,10 +219,14 @@ def fetch_products_by_collection(shop_url, collection_id, days):
 
         variables = {"after": cursor} if cursor else {}
         response = requests.post(url, json={"query": query, "variables": variables}, headers=headers)
-        logger.debug(response.json())
+        # logger.debug(response.json())
 
         if response.status_code == 200:
             data = response.json()
+            if not data:
+                logger.error("No products data available.")
+                order_not_found(response.json(), shop_url)
+                return []
             new_products = (
                 data.get("data", {})
                 .get("collection", {})
@@ -365,7 +369,7 @@ def calculate_revenue_from_orders(orders, product_id):
                 price = float(line_item["node"]["originalUnitPriceSet"]["shopMoney"]["amount"])
                 quantity = int(line_item["node"]["quantity"])
                 total_revenue += price * quantity
-                logger.debug("total revuenue" ,total_revenue)
+                logger.debug(f"total revuenue,{total_revenue}")
 
     return total_revenue
 
