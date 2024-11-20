@@ -214,7 +214,7 @@ def async_cron_sort_product_order(shop_id, collection_id, algo_id):
         client_collection.save()
 
         pinned_product_ids = client_collection.pinned_products
-        new_order = []
+        new_order = []  
 
         if pinned_product_ids:
             logger.info("Pinned products found, processing...")

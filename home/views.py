@@ -372,7 +372,7 @@ def get_graph(request):
 
             # top 5 products globally on the basis of REVENUE
             top_products_by_revenue = ClientProducts.objects.filter(shop_id=shop_id)\
-                .order_by('-total_revenue')[:5] 
+                .order_by('-total_revenue')[:10] 
             
             top_products_revenue_data = [
                 {
@@ -385,7 +385,7 @@ def get_graph(request):
 
             # top 5 products globally on the basis of SALES
             top_products_by_sales = ClientProducts.objects.filter(shop_id=shop_id)\
-                .order_by('-total_sold_units')[:5]  
+                .order_by('-total_sold_units')[:10]  
             
             top_products_sales_data = [
                 {
@@ -398,7 +398,7 @@ def get_graph(request):
             
             # top 5 collections globally on the basis of REVENUE
             top_collections_by_revenue = ClientCollections.objects.filter(shop_id=shop_id)\
-                .order_by('-collection_total_revenue')[:5]  
+                .order_by('-collection_total_revenue')[:10]  
             
             top_collections_revenue_data = [
                 {
@@ -411,7 +411,7 @@ def get_graph(request):
             
             # top 5 collections globally on the basis of SALES
             top_collections_by_sales = ClientCollections.objects.filter(shop_id=shop_id)\
-                .order_by('-collection_sold_units')[:5]  
+                .order_by('-collection_sold_units')[:10]  
             
             top_collections_sales_data = [
                 {
@@ -1608,7 +1608,7 @@ def save_client_algorithm(request):
         )
 
         logger.info("Algorithm created successfully for shop_id %s, algo_id %s", shop_id, client_algo.algo_id)
-
+        
         return Response(
             {
                 "message": "Algorithm created successfully",

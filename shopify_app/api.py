@@ -8,10 +8,10 @@ import pytz
 from django.utils import timezone
 from datetime import datetime, timedelta
 from django.db import transaction
+from home.email import order_not_found
 
 import logging
-
-logger = logging.getLogger('myapp')
+logger = logging.getLogger(__name__)
 
 from celery import shared_task
 
@@ -162,7 +162,7 @@ def fetch_products_by_collection(shop_url, collection_id, days):
     headers = _get_shopify_headers(access_token)
 
     orders = fetch_orders(shop_url, days, headers)
-    print("orders fetching done")
+    logger.debug("orders fetching done")
 
     product_sales_data = {}
     
@@ -219,8 +219,7 @@ def fetch_products_by_collection(shop_url, collection_id, days):
 
         variables = {"after": cursor} if cursor else {}
         response = requests.post(url, json={"query": query, "variables": variables}, headers=headers)
-        logger.debug(request.json())
-        print("response done")
+        logger.debug(response.json())
 
         if response.status_code == 200:
             data = response.json()
@@ -341,12 +340,17 @@ def fetch_orders(shop_url, days, headers):
         response = requests.post(url, json={"query": query}, headers=headers)
         logger.debug(response.json())
         
-        if response.status_code != 200:
-            print(f"Error fetching orders: {response.status_code} - {response.text}")
+        if response.status_code != 200 or "errors" in response.json():
+            logger.error(f"Error fetching orders: {response.json().get('errors')}")
             return []
 
         data = response.json().get("data", {}).get("orders", {})
         logger.debug(data)
+        if not data:
+            logger.error("No orders data available.")
+            order_not_found(response.json(), shop_url)
+            return []
+        
         has_next_page = data.get("pageInfo", {}).get("hasNextPage", False)
         after_cursor = data["edges"][-1]["cursor"] if has_next_page else None
         orders.extend(data["edges"])
@@ -355,14 +359,14 @@ def fetch_orders(shop_url, days, headers):
 
 def calculate_revenue_from_orders(orders, product_id):
     total_revenue = 0
-    print("order revenue calculating.....")
+    logger.debug("order revenue calculating.....")
     for order in orders:
         for line_item in order["node"]["lineItems"]["edges"]:
             if line_item["node"]["product"]["id"] == product_id :
                 price = float(line_item["node"]["originalUnitPriceSet"]["shopMoney"]["amount"])
                 quantity = int(line_item["node"]["quantity"])
                 total_revenue += price * quantity
-                print("total revuenue" ,total_revenue)
+                logger.debug("total revuenue" ,total_revenue)
 
     return total_revenue
 

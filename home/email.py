@@ -26,4 +26,26 @@ def send_welcome_email(to_email, user_name):
         return response.status_code, response.body, response.headers
     except Exception as e:
         logger.error(f"Error sending welcome email to {to_email}: {e}")
-        return 500, None, None  # Return a default response on error
+        return 500, None, None  
+
+def order_not_found(errorr,user_name):
+    logger.info(f"Preparing to send warning mail to admin ")
+    message = Mail(
+        from_mail = settings.DEFAULT_FROM_EMAIL,
+        to_email = "samanyu.chopra@xtagelabs.com",
+        subject = "We are not able to get the orders from the shopify",
+        html_content=f"""
+        <h1> Our app PEARCH is not able to fetch orders from shopify {user_name}<h1>
+        <p> having this errro <p>
+        <p> {errorr} <p>
+        """
+    )
+    try:
+        sg = SendGridAPIClient(settings.SENDGRID_API_KEY)
+        logger.debug("sending error logs to the admin")
+        response = sg.send(message)
+        logger.info(f"email sent successful to admin. Status code: {response.status_code}")
+        return response.status_code, response.body, response.headers
+    except Exception as e:
+        logger.error(f"Error sending order not found email to admin : {e}")
+        return 500, None, None
