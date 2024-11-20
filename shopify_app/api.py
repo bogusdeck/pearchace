@@ -516,36 +516,12 @@ def update_collection_products_order(
         url = f"https://{shop_url}/admin/api/{api_version}/graphql.json"
         collection_global_id = f"gid://shopify/Collection/{collection_id}"
 
-        set_manual_sort_mutation = """
-        mutation setSortOrder($id: ID!, $sortOrder: CollectionRuleSetSortOrder!) {
-            collectionRuleSetSortOrderUpdate(id: $id, sortOrder: $sortOrder) {
-                collection {
-                    id
-                }
-                userErrors {
-                    field
-                    message
-                }
-            }
-        }
-        """
-        variables = {"id": collection_global_id, "sortOrder": "MANUAL"}
-        sort_response = requests.post(
-            url, json={"query": set_manual_sort_mutation, "variables": variables}, headers=headers
-        )
-        if sort_response.status_code == 200:
-            sort_result = sort_response.json()
-            logger.debug(sort_result)
-            sort_errors = (
-                sort_result.get("data", {})
-                .get("collectionRuleSetSortOrderUpdate", {})
-                .get("userErrors", [])
-            )
-            if sort_errors:
-                print(f"Failed to set sort order to manual: {sort_errors}")
-                return False
-        else:
-            print(f"Failed to set sort order: {sort_response.status_code} - {sort_response.text}")
+        sort_order_url = f"https://{shop_url}/admin/api/{api_version}/custom_collections/{collection_id}.json"
+        payload = {"custom_collection": {"id": collection_id, "sort_order": "manual"}}
+        sort_response = requests.put(sort_order_url, json=payload, headers=headers)
+
+        if sort_response.status_code != 200:
+            print(f"Failed to set sort order to manual: {sort_response.text}")
             return False
 
         reorder_mutation = """

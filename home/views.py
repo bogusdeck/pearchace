@@ -2021,10 +2021,10 @@ def get_collection_analytics(request, collection_id):
 
             logger.info(f"Collection found: {collection.collection_name}")
 
-            top_products_by_revenue = ClientProducts.objects.filter(collection_id=collection_id).order_by('-total_revenue')[:5]
+            top_products_by_revenue = ClientProducts.objects.filter(collection_id=collection_id).order_by('-total_revenue')[:10]
             logger.debug(f"Top products by revenue for collection {collection_id}: {top_products_by_revenue}")
 
-            top_products_by_sold_units = ClientProducts.objects.filter(collection_id=collection_id).order_by('-total_sold_units')[:5]
+            top_products_by_sold_units = ClientProducts.objects.filter(collection_id=collection_id).order_by('-total_sold_units')[:10]
             logger.debug(f"Top products by sold units for collection {collection_id}: {top_products_by_sold_units}")
 
             top_revenue_data = [
