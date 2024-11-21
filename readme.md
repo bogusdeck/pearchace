@@ -75,3 +75,9 @@ code file structure
 └── docker-compose.yml
 
 ```
+
+
+
+## Things to resolve in the future 
+- admin api usage  - > sorting order setup before updating products of a collection 
+- login/authentication -> To get the access token for a store

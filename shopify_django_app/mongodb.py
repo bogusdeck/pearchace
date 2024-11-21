@@ -9,7 +9,8 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework import status
-from shopify_app.models import History
+from shopify_app.models import History, Client
+from home.apps import convert_utc_to_local
 
 import logging
 logger = logging.getLogger(__name__)
@@ -120,22 +121,24 @@ def history_status(request):
                 {"error": "Shop ID not found in session"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        
+        client = Client.objects.get(shop_id=shop_id)
 
-        # Retrieve history data for the shop
         history_queryset = History.objects.filter(shop_id=shop_id).order_by('-requested_at')
         logger.info("History data retrieved for shop_id %s", shop_id)
         
-        # Paginate the history data
+
         paginator = PageNumberPagination()
         paginator.page_size = request.query_params.get('page_size', 10)
         paginated_queryset = paginator.paginate_queryset(history_queryset, request)
         logger.info("Paginated history data for shop_id %s with page_size %s", shop_id, paginator.page_size)
+        timezone_offset = client.timezone_offset
         
         history_data = [
             {
-                "requested_at": history.requested_at,
-                "started_at": history.started_at,
-                "ended_at": history.ended_at,
+                "requested_at": convert_utc_to_local(history.requested_at, timezone_offset).strftime('%Y-%m-%d %H:%M:%S') if history.requested_at else "-",
+                "started_at": convert_utc_to_local(history.started_at, timezone_offset).strftime('%Y-%m-%d %H:%M:%S') if history.started_at else "-",
+                "ended_at": convert_utc_to_local(history.ended_at, timezone_offset).strftime('%Y-%m-%d %H:%M:%S') if history.ended_at else "-",
                 "requested_by": history.requested_by,
                 "product_count": history.product_count,
                 "status": history.status,
@@ -143,6 +146,7 @@ def history_status(request):
             }
             for history in paginated_queryset
         ]
+        
         
         logger.info("History data serialization completed for shop_id %s", shop_id)
         return paginator.get_paginated_response(history_data)

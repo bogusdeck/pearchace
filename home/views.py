@@ -16,6 +16,7 @@ import shopify
 from django.views.decorators.csrf import csrf_protect
 from django.core.exceptions import ObjectDoesNotExist
 from .email import send_welcome_email
+from .apps import convert_utc_to_local
 from shopify_app.models import (
     Client,
     Usage,
@@ -108,10 +109,11 @@ def index(request):
         contact_email = shop_data.get("contactEmail", "")
         currency = shop_data.get("currencyCode", "")
         timezone = shop_data.get("timezoneAbbreviation", "")
+        timezone_offset = shop_data.get("timezoneOffset", "")  
         billing_address = shop_data.get("billingAddress", {})
         created_at_str = shop_data.get("createdAt", "")
 
-        created_at = None
+        created_at = None 
         if created_at_str:
             try:
                 created_at = datetime.strptime(created_at_str, "%Y-%m-%dT%H:%M:%SZ")
@@ -140,6 +142,7 @@ def index(request):
                 "is_active": True,
                 "uninstall_date": None,
                 "timezone": timezone,
+                "timezone_offset": timezone_offset,
                 "createdateshopify": created_at,
                 "default_algo": default_algo
             },
@@ -184,7 +187,7 @@ def index(request):
     
 @api_view(["GET"])  # First API called by frontend to show client name and URL on the dashboard
 @permission_classes([IsAuthenticated])  # Fetch and store collection done
-def get_client_info(request):   
+def get_client_info(request):
     auth_header = request.headers.get("Authorization", None)
     if auth_header is None:
         logger.warning("Authorization header missing.")
@@ -314,7 +317,7 @@ def available_sorts(request):
         )
         
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated])  #TODO:roundoff
 def get_graph(request):
     auth_header = request.headers.get("Authorization", None)
     if auth_header is None:
@@ -370,7 +373,7 @@ def get_graph(request):
 
             dates_data = [{"date": date.strftime("%d/%m/%Y"), "revenue": revenue_data[date]} for date in date_list]
 
-            # top 5 products globally on the basis of REVENUE
+            # top 10 products globally on the basis of REVENUE
             top_products_by_revenue = ClientProducts.objects.filter(shop_id=shop_id)\
                 .order_by('-total_revenue')[:10] 
             
@@ -383,7 +386,7 @@ def get_graph(request):
                 for product in top_products_by_revenue
             ]
 
-            # top 5 products globally on the basis of SALES
+            # top 10 products globally on the basis of SALES
             top_products_by_sales = ClientProducts.objects.filter(shop_id=shop_id)\
                 .order_by('-total_sold_units')[:10]  
             
@@ -396,7 +399,7 @@ def get_graph(request):
                 for product in top_products_by_sales
             ]
             
-            # top 5 collections globally on the basis of REVENUE
+            # top 10 collections globally on the basis of REVENUE
             top_collections_by_revenue = ClientCollections.objects.filter(shop_id=shop_id)\
                 .order_by('-collection_total_revenue')[:10]  
             
@@ -409,7 +412,7 @@ def get_graph(request):
                 for collection in top_collections_by_revenue
             ]
             
-            # top 5 collections globally on the basis of SALES
+            # top 10 collections globally on the basis of SALES
             top_collections_by_sales = ClientCollections.objects.filter(shop_id=shop_id)\
                 .order_by('-collection_sold_units')[:10]  
             
@@ -456,7 +459,7 @@ def get_graph(request):
         )
         
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated]) #TODO:Sortdate setup (right now empty)
 def last_active_collections(request):
     auth_header = request.headers.get("Authorization", None)
     if auth_header is None:
@@ -537,8 +540,8 @@ def last_active_collections(request):
 ###########################################################################################################################
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])  # give the last sorted date globally
-def get_last_sorted_time(request, client_id):  # working not tested
+@permission_classes([IsAuthenticated])  # gives the last sorted date globally using last usage time
+def get_last_sorted_time(request, client_id):  
     auth_header = request.headers.get("Authorization", None)
     if auth_header is None:
         logger.warning("Authorization header missing")
@@ -578,7 +581,12 @@ def get_last_sorted_time(request, client_id):  # working not tested
 
             if latest_usage:
                 logger.info("Last sorted time for client %s: %s", client_id, latest_usage.updated_at)
-                response_data = {"last_sorted_time": latest_usage.updated_at}
+                last_sorted_local_time = convert_utc_to_local(
+                    latest_usage.updated_at, client.timezone_offset
+                )
+                response_data = {
+                    "last_sorted_time": last_sorted_local_time.strftime('%Y-%m-%d %H:%M:%S')
+                }
             else:
                 logger.info("No usage data found for client %s", client_id)
                 response_data = {"message": "No usage data found for this client"}
@@ -610,7 +618,7 @@ class ClientCollectionsPagination(PageNumberPagination):
     page_size_query_param = "page_size"
     max_page_size = 100
 
-@api_view(["GET"])
+@api_view(["GET"]) # TODO: last sorted date enter needed
 @permission_classes([IsAuthenticated])  # all client collections given to the frontend with pagination (page size = 10)
 def get_client_collections(request, client_id):  # working and tested
     auth_header = request.headers.get("Authorization", None)
@@ -648,7 +656,18 @@ def get_client_collections(request, client_id):  # working and tested
                 )
 
             # Get filter and pageSize parameters from request
-            filter_param = int(request.query_params.get("filter", 0))  # Default to 0
+            try:
+                filter_param = int(request.query_params.get("filter", 0)) 
+            except ValueError:
+                logger.warning("Invalid 'filter' parameter provided %s", request.query_params.get("filter"))
+                filter_param = 0
+            
+            try:
+                page_size = int(request.query_params.get("pageSize",10))
+            except ValueError:
+                logger.warning("Invalid 'pageSize' parameter provided :%s", request.query_params.get("pageSize"))
+                page_size = 10
+            
             page_size = int(request.query_params.get("pageSize", 10))  # Default page size is 10
 
             # Filter collections based on filter_param
@@ -1050,7 +1069,14 @@ def fetch_last_sort_date(request):
 
         # Get the last sort date or default to "no sort found"
         sort_date = collection.sort_date if collection.sort_date else "no sort found"
-        logger.info("Fetched last sort date for collection %s: %s", collection_id, sort_date)
+        
+        if sort_date:
+            sort_date_local = convert_utc_to_local(sort_date, client.timezone_offset)
+            sort_date_str = sort_date_local.strftime('%Y-%m-%d %H:%M:%S')
+        else:
+            sort_date_str = "no sort found"
+        
+        logger.info("Fetched Last sort date for collection %s: %s", collection_id, sort_date)
 
         return Response(
             {
@@ -2400,16 +2426,17 @@ def update_global_settings(request):
                 frequency_in_hours = data.get("custom_frequency_in_hours")
 
                 if start_time and stop_time and frequency_in_hours:
-                    start_hour, start_minute = map(int, start_time.split(":"))
-                    stop_hour, stop_minute = map(int, stop_time.split(":"))
+                    timezone_offset = client.timezone_offset
 
-                    if start_hour >= stop_hour:
-                        logger.error("Start time must be before stop time")
-                        return Response(
-                            {"error": "Start time must be before stop time"},
-                            status=status.HTTP_400_BAD_REQUEST,
-                        )
+                    start_time_local = convert_utc_to_local(start_time, timezone_offset)
+                    stop_time_local = convert_utc_to_local(stop_time, timezone_offset)
 
+                    start_hour = start_time_local.hour
+                    start_minute = start_time_local.minute
+                    stop_hour = stop_time_local.hour
+                    stop_minute = stop_time_local.minute
+
+                    # Set up your cron jobs based on local time
                     current_hour = start_hour
                     while current_hour < stop_hour:
                         crontab_schedule, _ = CrontabSchedule.objects.get_or_create(

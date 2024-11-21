@@ -41,6 +41,7 @@ class Client(AbstractBaseUser):
     member = models.BooleanField(default=False)
     lookback_period = models.IntegerField(default=30, blank=True, null=True)
     timezone = models.CharField(default='UTC', max_length=3)
+    timezone_offset = models.CharField(max_length=6, blank=True, null=True)
     createdateshopify = models.DateTimeField(blank=True, null=True)
     billingAddress = models.JSONField(default=dict)
     

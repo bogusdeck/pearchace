@@ -469,7 +469,9 @@ def fetch_client_data(shop_url, access_token):
           displayName
         }
         createdAt
+        timezoneOffset
         timezoneAbbreviation
+        ianaTimezone
         currencyCode
         contactEmail: email
         billingAddress {
@@ -484,11 +486,11 @@ def fetch_client_data(shop_url, access_token):
       }
     }
     """
-
+    
     response = requests.post(url, json={"query": query}, headers=headers)
     if response.status_code == 200:
         data = response.json()
-        print("Data from Shopify:", data) 
+        logger.debug(f"Data from Shopify: {data}") 
         return data.get("data", {}).get("shop", {})
     else:
         print(f"Error fetching shop data: {response.status_code} - {response.text}")
@@ -521,8 +523,13 @@ def update_collection_products_order(
         sort_response = requests.put(sort_order_url, json=payload, headers=headers)
 
         if sort_response.status_code != 200:
-            print(f"Failed to set sort order to manual: {sort_response.text}")
-            return False
+            sort_error = sort_response.json()
+            if "errors" in sort_error and "Not Found" in str(sort_error["errors"]):
+                print(f"Collection {collection_id} is likely automated and cannot be set to manual.")
+                return False
+            else:
+                print(f"Failed to set sort order to manual: {sort_response.text}")
+                return False
 
         reorder_mutation = """
         mutation updateProductOrder($id: ID!, $moves: [MoveInput!]!) {
@@ -555,7 +562,6 @@ def update_collection_products_order(
             )
 
             if not reorder_errors:
-                # Update usage data
                 try:
                     client = Client.objects.get(shop_url=shop_url)
                     usage = Usage.objects.get(shop=client)
