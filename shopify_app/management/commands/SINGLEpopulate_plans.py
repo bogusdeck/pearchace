@@ -25,7 +25,7 @@ class Command(BaseCommand):
                 'addon_sorts_price': None,  
             },
             {
-                'name': 'Pro Plan',
+                'name': 'Advance Plan',
                 'cost_month': 199.00,
                 'cost_annual': 2189.00,
                 'sort_limit': 10000,
@@ -34,7 +34,7 @@ class Command(BaseCommand):
                 'addon_sorts_price': None,  
             },
             {
-                'name': 'VIP Plan',
+                'name': 'Pro Plan',
                 'cost_month': 299.00,
                 'cost_annual': 3289.00,
                 'sort_limit': 25000,
