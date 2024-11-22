@@ -6,7 +6,6 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-
 class HomeConfig(AppConfig):
     name = 'home'
 
@@ -25,6 +24,7 @@ def convert_utc_to_local(utc_time, timezone_offset):
     if not utc_time or not timezone_offset:
         logger.debug("utc_time or timezone_offset is not present here")
         return utc_time
+    
 
     # Determine the sign of the offset
     sign = 1 if timezone_offset[0] == '+' else -1

@@ -8,7 +8,7 @@ from rest_framework.exceptions import NotFound
 from django.shortcuts import redirect
 from shopify_app.decorators import shop_login_required
 from django.http import JsonResponse
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from django.utils import timezone
 import pytz
 from django.views.decorators.http import require_GET
@@ -584,8 +584,9 @@ def get_last_sorted_time(request, client_id):
                 last_sorted_local_time = convert_utc_to_local(
                     latest_usage.updated_at, client.timezone_offset
                 )
-                response_data = {
-                    "last_sorted_time": last_sorted_local_time.strftime('%Y-%m-%d %H:%M:%S')
+                response_data = {   
+                    "last_sorted_time": last_sorted_local_time.strftime('%Y-%m-%d %H:%M:%S'),
+                    "timezone": client.timezone
                 }
             else:
                 logger.info("No usage data found for client %s", client_id)
@@ -2424,41 +2425,59 @@ def update_global_settings(request):
                 start_time = data.get("custom_start_time")
                 stop_time = data.get("custom_stop_time")
                 frequency_in_hours = data.get("custom_frequency_in_hours")
+                logger.debug(f"Received custom_start_time: {start_time}, custom_stop_time: {stop_time}, frequency_in_hours: {frequency_in_hours}")
 
                 if start_time and stop_time and frequency_in_hours:
-                    timezone_offset = client.timezone_offset
+                    try :
+                        try:
+                            start_time = datetime.combine(date.today(), datetime.strptime(start_time, "%H:%M").time())
+                            stop_time = datetime.combine(date.today(), datetime.strptime(stop_time, "%H:%M").time())
+                            logger.debug(f"Parsed start_time: {start_time}, stop_time: {stop_time}")
+                        except ValueError as e:
+                            logger.error(f"Invalid datetime format: start_time={start_time}, stop_time={stop_time}. Error: {str(e)}")
+                            return Response(
+                                {"error": "Invalid time format. Expected format: 'HH:MM'"},
+                                status=status.HTTP_400_BAD_REQUEST,
+                            )
+                        
+                        timezone_offset = client.timezone_offset
+                        
+                        start_time_local = convert_utc_to_local(start_time, timezone_offset)
+                        stop_time_local = convert_utc_to_local(stop_time, timezone_offset)
+                        
+                        start_hour = start_time_local.hour
+                        start_minute = start_time_local.minute
+                        stop_hour = stop_time_local.hour
+                        stop_minute = stop_time_local.minute
 
-                    start_time_local = convert_utc_to_local(start_time, timezone_offset)
-                    stop_time_local = convert_utc_to_local(stop_time, timezone_offset)
+                        current_hour = start_hour
+                        while current_hour < stop_hour:
+                            crontab_schedule, _ = CrontabSchedule.objects.get_or_create(
+                                minute=start_minute, hour=current_hour
+                            )
+                            PeriodicTask.objects.create(
+                                crontab=crontab_schedule,
+                                name=f"sort_collections_{client.shop_id}_custom_{current_hour}",
+                                task="shopify_app.tasks.sort_active_collections",
+                                args=json.dumps([client.id]),
+                            )
+                            current_hour += frequency_in_hours
 
-                    start_hour = start_time_local.hour
-                    start_minute = start_time_local.minute
-                    stop_hour = stop_time_local.hour
-                    stop_minute = stop_time_local.minute
-
-                    # Set up your cron jobs based on local time
-                    current_hour = start_hour
-                    while current_hour < stop_hour:
-                        crontab_schedule, _ = CrontabSchedule.objects.get_or_create(
-                            minute=start_minute, hour=current_hour
+                        client.custom_start_time = start_time
+                        client.custom_stop_time = stop_time
+                        client.custom_frequency_in_hours = frequency_in_hours
+                        logger.info(
+                            "Custom schedule created for start: %s, stop: %s, frequency: %s hours",
+                            start_time,
+                            stop_time,
+                            frequency_in_hours,
                         )
-                        PeriodicTask.objects.create(
-                            crontab=crontab_schedule,
-                            name=f"sort_collections_{client.shop_id}_custom_{current_hour}",
-                            task="shopify_app.tasks.sort_active_collections",
-                            args=json.dumps([client.id]),
+                    except ValueError as e:
+                        logger.error("Invalid datetime format for custom start or stop time")
+                        return Response(
+                            {"error": "Invalid datetime format for custom start or stop time"},
+                            status=status.HTTP_400_BAD_REQUEST,
                         )
-                        current_hour += frequency_in_hours
-
-                    client.custom_start_time = start_time
-                    client.custom_stop_time = stop_time
-                    client.custom_frequency_in_hours = frequency_in_hours
-                    logger.info(
-                        "Custom schedule created for start: %s, stop: %s, frequency: %s hours",
-                        start_time,
-                        stop_time,
-                        frequency_in_hours,
-                    )
                 else:
                     logger.error("Invalid custom schedule parameters")
                     return Response(
