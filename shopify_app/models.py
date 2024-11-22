@@ -114,6 +114,7 @@ class ClientCollections(models.Model):
     collection_total_revenue = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
     collection_sold_units = models.IntegerField(default=0)
     never_active = models.BooleanField(default=True)
+    is_smart = models.BooleanField(default=False)
 
     class Meta:
         unique_together = ('shop', 'collection_id')  

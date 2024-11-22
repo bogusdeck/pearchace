@@ -77,6 +77,7 @@ def async_fetch_and_store_collections(shop_id):
             collection_name = collection["title"]
             products_count = collection["products_count"]
             updated_at = collection["updated_at"]
+            is_smart = collection["type"] == "Automatic Collection"
 
             try:
                 default_algo = ClientAlgo.objects.get(algo_name="Promote New")
@@ -96,6 +97,7 @@ def async_fetch_and_store_collections(shop_id):
                     "parameters_used": {},
                     "updated_at": updated_at,
                     "refetch": True,
+                    "is_smart": is_smart,
                 },
             )
 
@@ -105,6 +107,7 @@ def async_fetch_and_store_collections(shop_id):
                 client_collection.products_count = products_count
                 client_collection.updated_at = updated_at
                 client_collection.refetch = True
+                client_collection.is_smart = is_smart
                 client_collection.save()
 
         logger.info(f"Collections fetched and stored for shop_id: {shop_id}, total: {len(collections)}")
@@ -411,6 +414,8 @@ def async_sort_product_order(shop_id, collection_id, algo_id, history_entry_id):
             logger.info("Product order updated successfully!")
             history_entry.status = 'Done'
             history_entry.product_count = ClientProducts.objects.filter(shop_id=shop_id,collection_id=collection_id).count()
+            client_collection.sort_date = datetime.now()
+            client_collection.save()
         else:
             history_entry.status = 'Failed'
             
@@ -521,7 +526,6 @@ def calculate_revenue(client_id):
 
     except Exception as e:
         logger.error(f"Exception occurred while calculating revenue for client {client_id}: {str(e)}")
-
 
 @shared_task
 def reset_sort_counts():

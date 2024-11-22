@@ -45,6 +45,11 @@ def fetch_collections(shop_url):
                         productsCount {
                             count
                         }
+                        rules {
+                            column 
+                            relation
+                            condition
+                        }
                     }
                 }
                 pageInfo {
@@ -76,6 +81,8 @@ def fetch_collections(shop_url):
             "title": collection["node"]["title"],
             "products_count": collection["node"]["productsCount"]["count"],
             "updated_at": collection["node"]["updatedAt"],
+            "type": "Automatic Collection" if collection["node"].get("rules") else "Manual Collection"
+
         }
         for collection in collections
     ]

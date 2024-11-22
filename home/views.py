@@ -707,6 +707,7 @@ def get_client_collections(request, client_id):  # working and tested
                             "last_sorted_date": collection.sort_date,
                             "product_count": collection.products_count,
                             "algo_id": algo_id,
+                            "is_smart": collection.is_smart,
                         }
                     )
                     logger.debug("Collection added to response: %s", collection.collection_id)
@@ -1068,8 +1069,7 @@ def fetch_last_sort_date(request):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # Get the last sort date or default to "no sort found"
-        sort_date = collection.sort_date if collection.sort_date else "no sort found"
+        sort_date = collection.sort_date 
         
         if sort_date:
             sort_date_local = convert_utc_to_local(sort_date, client.timezone_offset)
@@ -1083,7 +1083,7 @@ def fetch_last_sort_date(request):
             {
                 "collection_id": collection.collection_id,
                 "collection_name": collection.collection_name,
-                "sort_date": sort_date,
+                "sort_date": sort_date_str,
             },
             status=status.HTTP_200_OK,
         )
