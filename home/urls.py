@@ -2,6 +2,7 @@ from django.urls import path
 from . import views
 from .billing import create_billing_plan, confirm_billing, purchase_additional_sorts, extra_sort_confirm, handle_app_uninstall
 
+
 urlpatterns = [
     # header 
     path('', views.index, name='root_path'),

@@ -434,16 +434,17 @@ def async_sort_product_order(shop_id, collection_id, algo_id, history_entry_id):
 
 @shared_task
 def sort_active_collections(client_id):
+    history_entry = None  
     try:
-        client = Client.objects.get(shop_id=client_id)
+        client = Client.objects.get(id=client_id)
         logger.info(f"Sorting active collections for client {client.shop_id}")
         
         history_entry = History.objects.create(
-            shop_id = client,
+            shop_id=client,
             requested_by='cron job',
             product_count=0,
             collection_name='All active collections',
-            status = 'pending'       
+            status='pending'       
         )
         
         usage = Usage.objects.get(shop_id=client.shop_id)
@@ -460,7 +461,7 @@ def sort_active_collections(client_id):
         if not active_collections.exists():
             logger.info(f"No active collections found for client {client.shop_id}")
             history_entry.status = "done"
-            history_entry.ended_at = datetime_now()
+            history_entry.ended_at = datetime.now()
             history_entry.save()
             return
 
@@ -471,37 +472,28 @@ def sort_active_collections(client_id):
 
             logger.info(f"Triggering async sort for collection {collection_id} of client {client.shop_id}")
             
-            tasks.append(async_cron_sort_product_order.s(client.shop_id, collection_id, algo_id, history_entry.id))
+            tasks.append(async_sort_product_order.s(client.shop_id, collection_id, algo_id, history_entry.id))
 
         chord(tasks)(calculate_revenue.s(client.shop_id))
-
         logger.info(f"Completed triggering sorting for all active collections of client {client.shop_id}")
 
     except Client.DoesNotExist:
         logger.error(f"Client with id {client_id} does not exist")
-        history_entry.status = "failed"
-        history_entry.ended_at = datetime.now()
-        history_entry.save()
     except Usage.DoesNotExist:
         logger.error(f"Usage data not found for client {client_id}")
-        history_entry.status = "failed"
-        history_entry.ended_at = datetime.now()
-        history_entry.save()
     except Subscription.DoesNotExist:
         logger.error(f"Subscription data not found for client {client_id}")
-        history_entry.status = "failed"
-        history_entry.ended_at = datetime.now()
-        history_entry.save()
     except SortingPlan.DoesNotExist:
         logger.error(f"Sorting plan not found for client {client_id}")
-        history_entry.status = "failed"
-        history_entry.ended_at = datetime.now()
-        history_entry.save()
     except Exception as e:
-        logger.error(f"Exception occurred while sorting active collections for client {client.shop_id}: {str(e)}")
-        history_entry.status = "failed"
-        history_entry.ended_at = datetime.now()
-        history_entry.save()
+        logger.error(f"Exception occurred while sorting active collections: {str(e)}")
+    finally:
+        
+        if isinstance(history_entry, History):
+            history_entry.status = "failed"
+            history_entry.ended_at = datetime.now()
+            history_entry.save()
+
 
 @shared_task
 def calculate_revenue(client_id):

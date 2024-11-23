@@ -562,6 +562,7 @@ def update_collection_products_order(
 
         if reorder_response.status_code == 200:
             reorder_result = reorder_response.json()
+            logger.debug(f"reorder data response is  : \n {reorder_result}")
             reorder_errors = (
                 reorder_result.get("data", {})
                 .get("collectionReorderProducts", {})

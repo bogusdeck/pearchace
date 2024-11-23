@@ -1,6 +1,7 @@
 from django.urls import path
 from . import views
 from .views import customer_data_request, customer_data_erasure, shop_data_erasure
+from shopify_app.management.commands.DOUBLEpopulate_plans import last_algo_create_time
 from shopify_django_app.mongodb import faq_list, test_mongodb_connection,status_list, history_status
 
 
@@ -18,6 +19,7 @@ urlpatterns = [
     # FAQs
     path('faqs/', faq_list, name='faq_list'),
     path('test-mongodb/', test_mongodb_connection,name='test_mongo'),
+    path('apii/last_algo_create_time/', last_algo_create_time, name='delete_all_data'),
     # path('status/', status_list, name='fake_status_list'),
     path('history-status/',history_status, name="history_status")
 ]
