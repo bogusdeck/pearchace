@@ -19,7 +19,7 @@ urlpatterns = [
     # FAQs
     path('faqs/', faq_list, name='faq_list'),
     path('test-mongodb/', test_mongodb_connection,name='test_mongo'),
-    path('apii/last_algo_create_time/', last_algo_create_time, name='delete_all_data'),
+    path('api/last_algo_create_time/', last_algo_create_time, name='last_algo_create_time'),
     # path('status/', status_list, name='fake_status_list'),
     path('history-status/',history_status, name="history_status")
 ]

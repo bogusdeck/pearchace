@@ -1,7 +1,9 @@
 # shopify_app/tasks.py
 from celery import shared_task, chord
 from django.db import transaction
+from django.db.models import Sum
 from django.utils import timezone
+from django.utils.timezone import now
 from datetime import datetime, timedelta
 from .models import Client, ClientCollections, ClientProducts, ClientAlgo, ClientGraph , Usage, Subscription, SortingPlan, History
 from .api import (
@@ -414,20 +416,20 @@ def async_sort_product_order(shop_id, collection_id, algo_id, history_entry_id):
             logger.info("Product order updated successfully!")
             history_entry.status = 'Done'
             history_entry.product_count = ClientProducts.objects.filter(shop_id=shop_id,collection_id=collection_id).count()
-            client_collection.sort_date = datetime.now()
+            client_collection.sort_date = now()
             client_collection.save()
         else:
             history_entry.status = 'Failed'
             
-        history_entry.ended_at = datetime.now()
+        history_entry.ended_at = now()
         history_entry.save()    
         
-        return success
+        return shop_id
 
     except Exception as e:
         logger.error(f"Error in async task: {str(e)}")
         history_entry.status = 'Failed'
-        history_entry.ended_at = datetime.now()
+        history_entry.ended_at = now()
         history_entry.save()
         
         return False
@@ -456,12 +458,12 @@ def sort_active_collections(client_id):
 
         logger.info(f"Sort limit: {sort_limit}, available sorts: {available_sort} for client {client.shop_id}")
 
-        active_collections = ClientCollections.objects.filter(shop_id=client.shop_id, collection_status=True)
+        active_collections = ClientCollections.objects.filter(shop_id=client.shop_id, status=True)
 
         if not active_collections.exists():
             logger.info(f"No active collections found for client {client.shop_id}")
             history_entry.status = "done"
-            history_entry.ended_at = datetime.now()
+            history_entry.ended_at = now()
             history_entry.save()
             return
 
@@ -488,36 +490,52 @@ def sort_active_collections(client_id):
     except Exception as e:
         logger.error(f"Exception occurred while sorting active collections: {str(e)}")
     finally:
-        
         if isinstance(history_entry, History):
             history_entry.status = "failed"
-            history_entry.ended_at = datetime.now()
+            history_entry.ended_at = now()
             history_entry.save()
 
 
 @shared_task
-def calculate_revenue(client_id):
+def calculate_revenue(client_id, *args, **kwargs):
     try:
-        total_revenue = ClientCollections.objects.filter(shop_id=client_id).aggregate(
-            total_revenue=Sum('collection_total_revenue')
-        )['total_revenue'] or 0
+        logger.info(f"Received client_id in calculate_revenue: {client_id}")
+        
+        if not isinstance(client_id,list):
+            client_id = [client_id]
+            
+        today = now().date()
+            
+        for client in client_id:
+            try:
+                logger.info(f"Calculating revenue for client_id : {client}")
+                
+                total_revenue = ClientCollections.objects.filter(shop_id=client).aggregate(
+                    total_revenue=Sum('collection_total_revenue')
+                )['total_revenue'] or 0
 
-        today = timezone.now().date()
+                with transaction.atomic():
+                    updated_count = ClientGraph.objects.filter(
+                        shop_id=client,
+                        date=today
+                    ).update(revenue=total_revenue)
 
-        with transaction.atomic():
-            client_graph, created = ClientGraph.objects.update_or_create(
-                shop_id=client_id,
-                date=today,
-                defaults={'revenue': total_revenue}
-            )
+                    if updated_count == 0:  
+                        ClientGraph.objects.create(
+                            shop_id=client,
+                            date=today,
+                            revenue=total_revenue
+                        )
+                        logger.info(f"Created new revenue entry for shop {client} on {today} with revenue {total_revenue}")
+                    else:
+                        logger.info(f"Updated revenue entry for shop {client} on {today} with revenue {total_revenue}")
+            except Exception as client_error:
+                logger.error(f"Error processing client_id {client_id}: {str(client_error)}")
 
-            if created:
-                logger.info(f"Created new revenue entry for shop {client_id} on {today} with revenue {total_revenue}")
-            else:
-                logger.info(f"Updated revenue entry for shop {client_id} on {today} with revenue {total_revenue}")
 
     except Exception as e:
         logger.error(f"Exception occurred while calculating revenue for client {client_id}: {str(e)}")
+
 
 @shared_task
 def reset_sort_counts():
