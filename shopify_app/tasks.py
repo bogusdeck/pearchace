@@ -73,6 +73,7 @@ def async_fetch_and_store_collections(shop_id):
 
         collections = fetch_collections(client.shop_url)
         logger.debug(f"Fetched {len(collections)} collections for shop_id: {shop_id}")
+        logger.debug(f"collection data : {collections}")
 
         for collection in collections:
             collection_id = int(collection["id"].split("/")[-1])
@@ -418,6 +419,9 @@ def async_sort_product_order(shop_id, collection_id, algo_id, history_entry_id):
             history_entry.product_count = ClientProducts.objects.filter(shop_id=shop_id,collection_id=collection_id).count()
             client_collection.sort_date = now()
             client_collection.save()
+            
+            client.sort_date = now()
+            client.save()
         else:
             history_entry.status = 'Failed'
             

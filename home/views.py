@@ -317,7 +317,7 @@ def available_sorts(request):
         )
         
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])  #TODO:roundoff
+@permission_classes([IsAuthenticated])  
 def get_graph(request):
     auth_header = request.headers.get("Authorization", None)
     if auth_header is None:
@@ -371,7 +371,10 @@ def get_graph(request):
             for entry in revenue_entries:
                 revenue_data[entry.date] = entry.revenue
 
-            dates_data = [{"date": date.strftime("%d/%m/%Y"), "revenue": revenue_data[date]} for date in date_list]
+            dates_data = [
+                {"date": date.strftime("%d/%m/%Y"), "revenue": round(revenue_data[date])} 
+                for date in date_list
+            ]
 
             # top 10 products globally on the basis of REVENUE
             top_products_by_revenue = ClientProducts.objects.filter(shop_id=shop_id)\
@@ -459,7 +462,7 @@ def get_graph(request):
         )
         
 @api_view(["GET"])
-@permission_classes([IsAuthenticated]) #TODO:Sortdate setup (right now empty)
+@permission_classes([IsAuthenticated]) 
 def last_active_collections(request):
     auth_header = request.headers.get("Authorization", None)
     if auth_header is None:
@@ -619,7 +622,7 @@ class ClientCollectionsPagination(PageNumberPagination):
     page_size_query_param = "page_size"
     max_page_size = 100
 
-@api_view(["GET"]) # TODO: last sorted date enter needed
+@api_view(["GET"]) 
 @permission_classes([IsAuthenticated])  # all client collections given to the frontend with pagination (page size = 10)
 def get_client_collections(request, client_id):  # working and tested
     auth_header = request.headers.get("Authorization", None)
@@ -694,11 +697,17 @@ def get_client_collections(request, client_id):  # working and tested
             paginator = ClientCollectionsPagination()
             paginator.page_size = page_size
             paginated_collections = paginator.paginate_queryset(client_collections, request)
+            
+            pending_collections = set(
+                History.objects.filter(shop_id=shop_id, status="pending")
+                .values_list("collection_name", flat=True)
+            )
 
             collections_data = []
             for collection in paginated_collections:
                 try:
                     algo_id = ClientAlgo.objects.get(algo_id=collection.algo_id).algo_id
+                    in_queue = collection.collection_name in pending_collections
                     collections_data.append(
                         {
                             "collection_name": collection.collection_name,
@@ -708,6 +717,7 @@ def get_client_collections(request, client_id):  # working and tested
                             "product_count": collection.products_count,
                             "algo_id": algo_id,
                             "is_smart": collection.is_smart,
+                            "in_queue":in_queue,
                         }
                     )
                     logger.debug("Collection added to response: %s", collection.collection_id)
@@ -813,8 +823,8 @@ def search_collections(request, client_id):  # working and tested
     
 
 @api_view(["PUT", "PATCH"])
-@permission_classes([IsAuthenticated])  # celery implemented fetch and store products
-def update_collection(request, collection_id):  # working not tested
+@permission_classes([IsAuthenticated])
+def update_collection(request, collection_id):
     auth_header = request.headers.get("Authorization", None)
     if auth_header is None:
         logger.warning("Authorization header missing")
@@ -863,6 +873,7 @@ def update_collection(request, collection_id):  # working not tested
             try:
                 algo = ClientAlgo.objects.get(algo_id=algo_id)
                 collection.algo = algo
+                updated = True
                 logger.info("Updated algo for collection %s to %s", collection_id, algo_id)
             except ClientAlgo.DoesNotExist:
                 logger.error("Algorithm with ID %s not found", algo_id)
@@ -889,10 +900,10 @@ def update_collection(request, collection_id):  # working not tested
                     status=status.HTTP_200_OK,
                 )
         else:
-            logger.warning("No valid fields provided to update for collection %s", collection_id)
+            logger.info("No updates were made to collection %s", collection_id)
             return Response(
-                {"error": "No valid fields provided to update"},
-                status=status.HTTP_400_BAD_REQUEST,
+                {"message": "No changes made to the collection"},
+                status=status.HTTP_200_OK,
             )
 
     except InvalidToken:
@@ -901,6 +912,7 @@ def update_collection(request, collection_id):  # working not tested
     except Exception as e:
         logger.exception("An unexpected error occurred: %s", e)
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
     
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])  # Celery is used for sorting in queue
@@ -1504,6 +1516,7 @@ def advance_config(request):
 
         collection_id = request.data.get("collection_id")
         algo_id = request.data.get("algo_id")
+        client = Client.objects.get(shop_id=shop_id)
         
         if not collection_id or not algo_id:
             logger.warning("Both collection_id and algo_id are required")
@@ -1537,11 +1550,10 @@ def advance_config(request):
             requested_by = "Manual",
             product_count=ClientProducts.objects.filter(shop_id=shop_id,collection_id=collection_id).count(),
             status='Active',
-            collection_name=client_collection.collection_name
+            collection_name=ClientCollections.objects.get(collection_id=collection_id).collection_name
         )
 
     
-        # Call to async task for sorting
         task = async_sort_product_order.delay(shop_id, collection_id, algo_id, history_entry.id)
 
         logger.info("Sorting initiated with advanced system, task_id: %s", task.id)
@@ -1624,7 +1636,28 @@ def save_client_algorithm(request):
                 {"error": "bucket_parameters must be a list of dictionaries"}, status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Creating the algorithm
+        primary_algorithms = [
+            "Promote New",
+            "Promote High Revenue Products",
+            "Promote High Inventory Products",
+            "Bestsellers with High Variant Availability",
+            "Promote High Variant Availability",
+            "Clearance Sale",
+            "Promote High Revenue New Products",
+        ]
+        
+        existing_algo = ClientAlgo.objects.filter(shop_id=shop_id, algo_name__iexact=algo_name).first()
+        if existing_algo and algo_name not in primary_algorithms:
+            logger.warning(
+                "Algorithm name '%s' already exists for shop_id %s and does not match any primary algorithms",
+                algo_name,
+                shop_id,
+            )
+            return Response(
+                {"error": f"Algorithm name '{algo_name}' already exists. Please choose a different name."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         client_algo = ClientAlgo.objects.create(
             shop_id=shop_id,
             algo_name=algo_name,

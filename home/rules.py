@@ -9,43 +9,47 @@ from typing import List, Dict, Tuple, Optional
 ############################################################################################
 
 # Updated and tested
-def new_products(products: List[Dict], days: Optional[int] = None, date_type: int = 0, capping: Optional[int] = None) -> Tuple[List[Dict], List[Dict]]:
-    date_field_mapping = {
-        0: 'created_at',
-        1: 'published_at',
-        2: 'updated_at'
-    }
-    
+def new_products(
+    products: List[Dict],
+    days: Optional[int] = None,
+    capping: Optional[int] = None,
+    date_type: Optional[int] = 0,
+    comparison_type: Optional[int] = 0,
+    inventory_threshold: Optional[int] = 0,
+    high_to_low: Optional[bool] = True
+) -> Tuple[List[Dict], List[Dict]]:
+    date_field_mapping = {0: 'created_at', 1: 'published_at', 2: 'updated_at'}
     date_field = date_field_mapping.get(date_type, 'created_at')
-    
     lookback_date = datetime.now(timezone.utc) - timedelta(days=days) if days else None
-    
+
     filtered_products = []
     for product in products:
         if isinstance(product, dict) and date_field in product and 'product_id' in product:
             product_date = product[date_field]
-            if isinstance(product_date, datetime):
-                product_date_parsed = product_date
-            else:
-                try:
-                    product_date_parsed = parser.isoparse(product_date)
-                except Exception as e:
-                    print(f"Error parsing {date_field} for product {product['product_id']}: {e}")
-                    continue
-            
+            try:
+                product_date_parsed = product_date if isinstance(product_date, datetime) else parser.isoparse(product_date)
+            except Exception as e:
+                print(f"Error parsing {date_field} for product {product['product_id']}: {e}")
+                continue
+
             if lookback_date is None or product_date_parsed >= lookback_date:
                 filtered_products.append(product)
-    
+
     sorted_products = sorted(filtered_products, key=lambda p: p[date_field], reverse=True)
-    
     capped_products = sorted_products[:capping] if capping else sorted_products
     uncapped_products = sorted_products[capping:] if capping else []
-    
     return capped_products, uncapped_products
 
 
-# Updated and tested
-def revenue_generated(products: List[Dict],days: Optional[int] = None,high_to_low: bool = True, capping: Optional[int] = None) -> Tuple[List[Dict], List[Dict]]:
+def revenue_generated(
+    products: List[Dict],
+    days: Optional[int] = None,
+    capping: Optional[int] = None,
+    date_type: Optional[int] = 0,
+    comparison_type: Optional[int] = 0,
+    inventory_threshold: Optional[int] = 0,
+    high_to_low: Optional[bool] = True
+) -> Tuple[List[Dict], List[Dict]]:
     lookback_date = datetime.now(timezone.utc) - timedelta(days=days) if days else None
 
     filtered_products = []
@@ -56,20 +60,25 @@ def revenue_generated(products: List[Dict],days: Optional[int] = None,high_to_lo
             except Exception as e:
                 print(f"Error parsing created_at for product {product['product_id']}: {e}")
                 continue
-            
+
             if lookback_date is None or product_date >= lookback_date:
                 filtered_products.append(product)
-    
+
     sorted_products = sorted(filtered_products, key=lambda p: p['total_revenue'], reverse=high_to_low)
-    
     capped_products = sorted_products[:capping] if capping else sorted_products
     uncapped_products = sorted_products[capping:] if capping else []
-
     return capped_products, uncapped_products
 
 
-# Updated and tested
-def Number_of_sales(products: List[Dict],days: Optional[int] = None,high_to_low: bool = True,capping: Optional[int] = None) -> Tuple[List[Dict], List[Dict]]:
+def Number_of_sales(
+    products: List[Dict],
+    days: Optional[int] = None,
+    capping: Optional[int] = None,
+    date_type: Optional[int] = 0,
+    comparison_type: Optional[int] = 0,
+    inventory_threshold: Optional[int] = 0,
+    high_to_low: Optional[bool] = True
+) -> Tuple[List[Dict], List[Dict]]:
     lookback_date = datetime.now(timezone.utc) - timedelta(days=days) if days else None
 
     filtered_products = []
@@ -80,19 +89,25 @@ def Number_of_sales(products: List[Dict],days: Optional[int] = None,high_to_low:
             except Exception as e:
                 print(f"Error parsing created_at for product {product['product_id']}: {e}")
                 continue
-            
+
             if lookback_date is None or product_date >= lookback_date:
                 filtered_products.append(product)
-    
-    sorted_products = sorted(filtered_products, key=lambda p: p['total_sold_units'], reverse=high_to_low)
 
+    sorted_products = sorted(filtered_products, key=lambda p: p['total_sold_units'], reverse=high_to_low)
     capped_products = sorted_products[:capping] if capping else sorted_products
     uncapped_products = sorted_products[capping:] if capping else []
-
     return capped_products, uncapped_products
 
-# Updated and not tested as no primary strategy is using this 
-def inventory_quantity(products: List[Dict],days: Optional[int] = None,high_to_low: bool = True,capping: Optional[int] = None) -> Tuple[List[Dict], List[Dict]]:
+
+def inventory_quantity(
+    products: List[Dict],
+    days: Optional[int] = None,
+    capping: Optional[int] = None,
+    date_type: Optional[int] = 0,
+    comparison_type: Optional[int] = 0,
+    inventory_threshold: Optional[int] = 0,
+    high_to_low: Optional[bool] = True
+) -> Tuple[List[Dict], List[Dict]]:
     lookback_date = datetime.now(timezone.utc) - timedelta(days=days) if days else None
 
     filtered_products = []
@@ -106,16 +121,21 @@ def inventory_quantity(products: List[Dict],days: Optional[int] = None,high_to_l
 
             if lookback_date is None or product_date >= lookback_date:
                 filtered_products.append(product)
-    
-    sorted_products = sorted(filtered_products, key=lambda p: p['total_inventory'], reverse=high_to_low)
 
+    sorted_products = sorted(filtered_products, key=lambda p: p['total_inventory'], reverse=high_to_low)
     capped_products = sorted_products[:capping] if capping else sorted_products
     uncapped_products = sorted_products[capping:] if capping else []
-
     return capped_products, uncapped_products
 
-# Updated and tested
-def variant_availability_ratio(products: List[Dict],days: Optional[int] = None,high_to_low: bool = True,capping: Optional[int] = None) -> Tuple[List[Dict], List[Dict]]:
+def variant_availability_ratio(
+    products: List[Dict],
+    days: Optional[int] = None,
+    capping: Optional[int] = None,
+    date_type: int = 0,
+    comparison_type: int = 0,
+    inventory_threshold: int = 0,
+    high_to_low: bool = True
+) -> Tuple[List[Dict], List[Dict]]:
     lookback_date = datetime.now(timezone.utc) - timedelta(days=days) if days else None
 
     filtered_products = []
@@ -129,12 +149,46 @@ def variant_availability_ratio(products: List[Dict],days: Optional[int] = None,h
 
             if lookback_date is None or product_date >= lookback_date:
                 filtered_products.append(product)
-    
-    sorted_products = sorted(filtered_products, key=lambda p: p['variant_count'], reverse=high_to_low)
 
+    sorted_products = sorted(filtered_products, key=lambda p: p['variant_count'], reverse=high_to_low)
     capped_products = sorted_products[:capping] if capping else sorted_products
     uncapped_products = sorted_products[capping:] if capping else []
+    return capped_products, uncapped_products
 
+def product_inventory(
+    products: List[Dict],
+    days: Optional[int] = None,
+    capping: Optional[int] = None,
+    date_type: Optional[int] = 0,
+    comparison_type: Optional[int] = 0,
+    inventory_threshold: Optional[int] = 0,
+    high_to_low: Optional[bool] = True
+) -> Tuple[List[Dict], List[Dict]]:
+    comparison_mapping = {
+        0: lambda p: p['total_inventory'] > inventory_threshold,
+        1: lambda p: p['total_inventory'] < inventory_threshold,
+        2: lambda p: p['total_inventory'] == inventory_threshold,
+        3: lambda p: p['total_inventory'] != inventory_threshold
+    }
+
+    comparison_function = comparison_mapping.get(comparison_type, comparison_mapping[0])
+    lookback_date = datetime.now(timezone.utc) - timedelta(days=days) if days else None
+
+    filtered_products = []
+    for product in products:
+        if isinstance(product, dict) and 'total_inventory' in product and 'created_at' in product and 'product_id' in product:
+            try:
+                product_date = parser.isoparse(product['created_at']) if isinstance(product['created_at'], str) else product['created_at']
+            except Exception as e:
+                print(f"Error parsing created_at for product {product['product_id']}: {e}")
+                continue
+
+            if (lookback_date is None or product_date >= lookback_date) and comparison_function(product):
+                filtered_products.append(product)
+
+    sorted_products = sorted(filtered_products, key=lambda p: p['total_inventory'], reverse=True)
+    capped_products = sorted_products[:capping] if capping else sorted_products
+    uncapped_products = sorted_products[capping:] if capping else []
     return capped_products, uncapped_products
 
 
@@ -161,39 +215,6 @@ def product_tags(products: List[Dict], days: Optional[int] = None, is_equal_to: 
 
     capped_products = filtered_by_tags[:capping] if capping else filtered_by_tags
     uncapped_products = filtered_by_tags[capping:] if capping else []
-
-    return capped_products, uncapped_products
-
-# Updated and tested
-def product_inventory(products: List[Dict], days: Optional[int] = None, comparison_type: int = 0, inventory_threshold: int = 0, capping: Optional[int] = None) -> Tuple[List[Dict], List[Dict]]:
-    comparison_mapping = {
-        0: lambda p: p['total_inventory'] > inventory_threshold,   
-        1: lambda p: p['total_inventory'] < inventory_threshold,   
-        2: lambda p: p['total_inventory'] == inventory_threshold,
-        3: lambda p: p['total_inventory'] != inventory_threshold   
-    }
-
-    comparison_function = comparison_mapping.get(comparison_type, comparison_mapping[0])
-    
-    lookback_date = datetime.now(timezone.utc) - timedelta(days=days) if days else None
-
-    filtered_products = []
-    for product in products:
-        if isinstance(product, dict) and 'total_inventory' in product and 'created_at' in product and 'product_id' in product:
-            try:
-                product_date = parser.isoparse(product['created_at']) if isinstance(product['created_at'], str) else product['created_at']
-            except Exception as e:
-                print(f"Error parsing created_at for product {product['product_id']}: {e}")
-                continue
-
-            if (lookback_date is None or product_date >= lookback_date) and comparison_function(product):
-                filtered_products.append(product)
-
-
-    sorted_products = sorted(filtered_products, key=lambda p: p['total_inventory'], reverse=True)
-
-    capped_products = sorted_products[:capping] if capping else sorted_products
-    uncapped_products = sorted_products[capping:] if capping else []
 
     return capped_products, uncapped_products
 
@@ -257,12 +278,11 @@ def i_am_feeling_lucky(products: List[Dict],days: Optional[int] = None,capping: 
 
 
 def rfm_sort(products, days: int = None, capping: int = None, high_to_low: bool = True):
-    # Calculate lookback date if days are provided
+    
     lookback_date = datetime.now() - timedelta(days=days) if days else None
 
     print("Lookback date:", lookback_date)
 
-    # Print product details before filtering
     for product in products:
         print("Product details:", product)
         print("created_at type:", type(product.get('created_at')))
@@ -270,25 +290,24 @@ def rfm_sort(products, days: int = None, capping: int = None, high_to_low: bool 
         print("total_sold_units:", product.get('total_sold_units'))
         print("total_revenue:", product.get('total_revenue'))
 
-    # Filter products that have necessary fields and match the date criteria
+
     filtered_products = [
         p for p in products
         if isinstance(p, dict)
-        and isinstance(p.get('created_at'), datetime)  # Ensure 'created_at' is a datetime object
+        and isinstance(p.get('created_at'), datetime)  
         and 'product_id' in p
-        and p.get('recency_score') is not None  # Ensure recency_score is not None
+        and p.get('recency_score') is not None  
         and 'total_sold_units' in p
         and 'total_revenue' in p
-        and (lookback_date is None or p['created_at'] >= lookback_date)  # Direct datetime comparison
+        and (lookback_date is None or p['created_at'] >= lookback_date)  
     ]
 
-    print("rfm_filtered_products:", filtered_products)  # Debugging output
+    print("rfm_filtered_products:", filtered_products)  
 
-    # If no products pass the filter, return empty lists
     if not filtered_products:
         return [], []
 
-    # Calculate RFM score for each product
+
     for product in filtered_products:
         product['rfm_score'] = product['recency_score'] + product['total_sold_units'] + product['total_revenue']
 

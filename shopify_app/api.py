@@ -28,6 +28,7 @@ def fetch_collections(shop_url):
     headers = _get_shopify_headers(access_token)
 
     url = f"https://{shop_url}/admin/api/{api_version}/graphql.json"
+    rest_url = f"https://{shop_url}/admin/api/{api_version}/smart_collections.json"
     collections = []
     has_next_page = True
     cursor = None
@@ -45,11 +46,6 @@ def fetch_collections(shop_url):
                         productsCount {
                             count
                         }
-                        rules {
-                            column 
-                            relation
-                            condition
-                        }
                     }
                 }
                 pageInfo {
@@ -65,6 +61,7 @@ def fetch_collections(shop_url):
         
         if response.status_code == 200:
             data = response.json()
+            logger.debug(f"graphql data : {data}")
             new_collections = data.get("data", {}).get("collections", {}).get("edges", [])
             collections.extend(new_collections)
             page_info = data.get("data", {}).get("collections", {}).get("pageInfo", {})
@@ -75,14 +72,23 @@ def fetch_collections(shop_url):
             print(f"Error fetching collections: {response.status_code} - {response.text}")
             break
         
+    rest_response = requests.get(rest_url, headers=headers)
+    automatic_collection_ids = set()
+    if rest_response.status_code == 200:
+        rest_data = rest_response.json()
+        for collection in rest_data.get("smart_collections", []):
+            automatic_collection_ids.add(collection["id"])
+    else:
+        logger.error(f"Error fetching smart collections: {rest_response.status_code} - {rest_response.text}")
+        
+        
     return [
         {
             "id": collection["node"]["id"],
             "title": collection["node"]["title"],
             "products_count": collection["node"]["productsCount"]["count"],
             "updated_at": collection["node"]["updatedAt"],
-            "type": "Automatic Collection" if collection["node"].get("rules") else "Manual Collection"
-
+            "type": "Automatic Collection" if int(collection["node"]["id"].split("/")[-1]) in automatic_collection_ids else "Manual Collection",
         }
         for collection in collections
     ]

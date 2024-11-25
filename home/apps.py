@@ -20,7 +20,7 @@ def convert_utc_to_local(utc_time, timezone_offset):
     Returns:
         datetime: The adjusted local datetime.
     """
-    logger.debug("Time conversion is in progress")
+    # logger.debug("Time conversion is in progress")
     if not utc_time or not timezone_offset:
         logger.debug("utc_time or timezone_offset is not present here")
         return utc_time
@@ -38,5 +38,5 @@ def convert_utc_to_local(utc_time, timezone_offset):
     else:
         local_time = utc_time - offset
 
-    logger.debug(f"UTC: {utc_time} | Offset: {timezone_offset} | Local: {local_time}")
+    # logger.debug(f"UTC: {utc_time} | Offset: {timezone_offset} | Local: {local_time}")
     return local_time
