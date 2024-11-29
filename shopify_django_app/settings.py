@@ -10,7 +10,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SECRET_KEY = os.environ.get('DJANGO_SECRET')
 
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'ec2-3-108-104-68.ap-south-1.compute.amazonaws.com','devbackend.pearchace.com','0.0.0.0:8000','3.108.104.68', '159.89.170.203']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'ec2-3-108-104-68.ap-south-1.compute.amazonaws.com','devbackend.pearchace.com','0.0.0.0:8000','3.108.104.68', '3.110.118.20']
 
 
 INSTALLED_APPS = [
@@ -50,10 +50,9 @@ CORS_ALLOWED_ORIGINS = [
     'http://3.108.104.68:80',
     'http://localhost:80',
     'https://frontend.pearchace.com',
-    'http://159.89.170.203:8000',
-    'http://143.244.131.36:3000',
-    'http://143.244.131.36:3001',
-    'http://143.244.131.36:3002',
+    'http://65.1.198.10:3001',
+    'http://65.1.198.10:3000',
+    'http://65.1.198.10:3002',
 ]
 
 CORS_ALLOW_CREDENTIALS = True
