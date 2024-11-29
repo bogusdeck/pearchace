@@ -15,7 +15,7 @@ from django.views.decorators.http import require_GET
 import shopify
 from django.views.decorators.csrf import csrf_protect
 from django.core.exceptions import ObjectDoesNotExist
-from .email import send_welcome_email
+from .email import send_welcome_email, user_query
 from .apps import convert_utc_to_local
 from shopify_app.models import (
     Client,
@@ -708,6 +708,11 @@ def get_client_collections(request, client_id):  # working and tested
                 try:
                     algo_id = ClientAlgo.objects.get(algo_id=collection.algo_id).algo_id
                     in_queue = collection.collection_name in pending_collections
+                    sort_date_str = (
+                        collection.sort_date.strftime("%H:%M:%S %Y:%m:%d")
+                        if collection.sort_date
+                        else None
+                    )
                     collections_data.append(
                         {
                             "collection_name": collection.collection_name,
@@ -918,7 +923,6 @@ def update_collection(request, collection_id):
 @permission_classes([IsAuthenticated])  # Celery is used for sorting in queue
 def update_product_order(request):
     try:
-        # Check for Authorization header
         auth_header = request.headers.get("Authorization", None)
         if auth_header is None:
             logger.warning("Authorization header missing")
@@ -2183,13 +2187,13 @@ def get_sorting_algorithms(request):
 
         def get_algorithm_description(algo_name):
             descriptions = {
-                "Promote New": "Promotes new products based on the number of days they have been listed.",
-                "Promote High Revenue Products": "Promotes products with high revenue based on the number of days and percentile.",
-                "Promote High Inventory Products": "Promotes products with high inventory based on the number of days and percentile.",
-                "Bestsellers": "Promotes products based on sales, sorted from high to low or low to high sales volume",
-                "Promote High Variant Availability": "Promotes products with high variant availability based on a variant threshold.",
-                "I Am Feeling Lucky": "Randomly chooses sorting to promote products.",
-                "RFM Sort": "Promotes products based on Recency, Frequency, and Monetary value."
+                "Promote New": "Highlight recently added products to captivate customer interest.",
+                "Promote High Revenue Products": "Showcase products that generate the most revenue to maximize profitability.",
+                "Promote High Inventory Products": "Prioritize products with high stock levels to encourage quicker sales.",
+                "Bestsellers": "Feature your most popular products to drive proven customer favorites.",
+                "Promote High Variant Availability": "Focus on products with the widest variant options to meet diverse needs.",
+                "I Am Feeling Lucky": "Add an element of surprise with a dynamic, randomized product display, selected by our Advanced AI engine.",
+                "RFM Sort": "Add an element of surprise with a dynamic, randomized product display, selected by our Advanced AI engine."
             }
             return descriptions.get(algo_name, "Description not available.")
 
@@ -2771,9 +2775,52 @@ def current_subscription_plan(request):
 # ██   ██ ██      ██    ██    ██    ██ ██   ██    ██    
 # ██   ██ ██ ███████    ██     ██████  ██   ██    ██    
 #######################################################################################################                                        
-# ⁡⁣⁢⁣status api endpoint ⁡
+
+# for contact us 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def send_shop_message(request):
+    """
+    API to send a message for a specific shop using shop_id, email (optional), and msg in the payload.
+    """
+    try:
+        logger.info("API hit: send_shop_message")
+        shop_id = request.data.get("shop_id")
+        email = request.data.get("email")
+        msg = request.data.get("msg")
+
+        if not shop_id:
+            logger.error("Missing 'shop_id' in the request payload")
+            return Response({"error": "'shop_id' is a required field"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not msg:
+            logger.error("Missing 'msg' in the request payload")
+            return Response({"error": "'msg' is a required field"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            client = Client.objects.get(shop_id=shop_id)
+        except Client.DoesNotExist:
+            logger.error(f"Client not found for shop_id: {shop_id}")
+            return Response({"error": "Client not found for the provided shop_id"}, status=status.HTTP_404_NOT_FOUND)
+
+        if not email:
+            if not client.email:
+                logger.error(f"No email provided and no default email found for shop_id: {shop_id}")
+                return Response({"error": "No recipient email available"}, status=status.HTTP_400_BAD_REQUEST)
+            email = client.email
 
 
+        logger.info(f"Message for shop {shop_id}: {msg}")
 
+        status_code, response_body, response_headers = user_query(email, client.shop_url, msg)
 
+        if status_code == 202:  
+            logger.info(f"Email sent successfully to {email} for shop {shop_id}")
+            return Response({"message": "Message successfully sent to the recipient"}, status=status.HTTP_200_OK)
+        else:
+            logger.error(f"Failed to send email to {email}. Status code: {status_code}")
+            return Response({"error": "Failed to send email. Please try again later."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+    except Exception as e:
+        logger.error(f"Unexpected error occurred: {str(e)}")
+        return Response({"error": "An unexpected error occurred. Please try again later."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

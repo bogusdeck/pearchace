@@ -21,3 +21,4 @@ django-celery-beat
 flower
 django-celery-results
 sendgrid
+colorlog

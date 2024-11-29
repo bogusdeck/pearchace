@@ -50,10 +50,9 @@ CORS_ALLOWED_ORIGINS = [
     'http://3.108.104.68:80',
     'http://localhost:80',
     'https://frontend.pearchace.com',
-    'http://159.89.170.203:8000',
-    'http://143.244.131.36:3000',
-    'http://143.244.131.36:3001',
-    'http://143.244.131.36:3002',
+    'http://65.1.198.10:3000',
+    'http://65.1.198.10:3001',
+    'http://65.1.198.10:3002',
 ]
 
 CORS_ALLOW_CREDENTIALS = True
@@ -76,7 +75,6 @@ CORS_ALLOW_HEADERS = [
 
 CSRF_TRUSTED_ORIGINS = [
     'https://devbackend.pearchace.com',
-    'https://159.89.170.203:8000'
 ]
 
 
@@ -103,18 +101,17 @@ WSGI_APPLICATION = 'shopify_django_app.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.getenv('DB_NAME', 'defaultdb'),
-        'USER': os.getenv('DB_USER', 'doadmin'),
+        'NAME': os.getenv('DB_NAME', 'postgres'),
+        'USER': os.getenv('DB_USER', 'pearchace'),
         'PASSWORD': os.getenv('DB_PASSWORD', ''),
         'HOST': os.getenv('DB_HOST', 'localhost'),
         'PORT': os.getenv('DB_PORT', '5432'),
         'OPTIONS': {
             'sslmode': os.getenv('DB_SSLMODE', 'require'),
         },
-    }
+    },
 }
 
-# user= pearchuser , name=pearchdb , password = PearchTest@123 , host=db , port = 5432 
 
 MONGODB_SETTINGS = {
     'db': 'shopify_app', 
@@ -221,21 +218,21 @@ LOGGING = {
     },
     'loggers': {
         'django': {
-            'level': 'INFO',  # Change to DEBUG if you want more Django logs
+            'level': 'INFO',  
             'handlers': ['console'],
             'propagate': True,
         },
         'shopify_django_app': {  
-            'level': 'DEBUG',  # Ensure it's set to DEBUG to capture debug logs
-            'handlers': ['console'],
-            'propagate': False,
-        },
-        'shopify_app': {  # Assuming you want to use this name for your logs
             'level': 'DEBUG',
             'handlers': ['console'],
             'propagate': False,
         },
-        'home': {  # Assuming you want to use this name for your logs
+        'shopify_app': {
+            'level': 'DEBUG',
+            'handlers': ['console'],
+            'propagate': False,
+        },
+        'home': {  
             'level': 'DEBUG',
             'handlers': ['console'],
             'propagate': False,

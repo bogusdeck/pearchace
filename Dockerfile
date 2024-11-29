@@ -19,5 +19,5 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 COPY . /app/
 
 # Command to run Gunicorn or the Django dev server
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "shopify_django_app.wsgi:application", "--log-level=debug", "--access-logfile=-", "--error-logfile=-"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "shopify_django_app.wsgi:application", "--log-level=debug", "--access-logfile=-", "--error-logfile=-", "--timeout 60"]
 

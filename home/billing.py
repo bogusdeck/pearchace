@@ -1,4 +1,8 @@
 import shopify
+import hmac
+import hashlib
+import base64
+import json
 from django.shortcuts import redirect
 from django.http import JsonResponse
 from django.http import HttpResponseRedirect
@@ -37,9 +41,18 @@ def generate_temp_token():
     return str(uuid.uuid4())
 
 def get_access_token(shop_url):
-    client = Client.objects.get(shop_url=shop_url)
-    print("me running")
-    return client.access_token
+    try:
+        logger.debug(f"Fetching access token for shop: {shop_url}")
+        client = Client.objects.get(shop_url=shop_url)
+        access_token = client.access_token
+        logger.debug(f"Access token retrieved for shop {shop_url}: {access_token}")
+        return access_token
+    except Client.DoesNotExist:
+        logger.error(f"Client with shop_url '{shop_url}' not found.")
+        return None
+    except Exception as e:
+        logger.error(f"An error occurred while fetching access token for shop {shop_url}: {e}")
+        return None
 
 
 def store_temp_token(shop_url, shop_id, temp_token, expiration_minutes=15):
@@ -357,12 +370,14 @@ def activate_recurring_charge(shop_url, shop_id, access_token, charge_id):
             if not client.trial_used:
                 current_period_start = timezone.now() + timedelta(days=14)
                 client.trial_used = True
-                client.save(update_fields=['trial_used'])
-                logger.debug("14-day trial period set; client.trial_used updated to True.")
+                client.save(update_fields=['trial_used'])  
+                logger.debug(f"14-day trial period set; client.trial_used updated to {client.trial_used}.")
             else:
                 current_period_start = timezone.now()
                 logger.debug("Trial already used; setting current period start to now.")
 
+            client.save()
+        
             period_length = 365 if is_annual else 30
             current_period_end = current_period_start + timedelta(days=period_length)
 
@@ -428,126 +443,166 @@ def activate_recurring_charge(shop_url, shop_id, access_token, charge_id):
         return False
 
 def cancel_active_recurring_charges(shop_url, access_token):
-    shopify_graphql_url = f"https://{shop_url}/admin/api/{os.environ.get('SHOPIFY_API_VERSION')}/graphql.json"
-    headers = {
-        "Content-Type": "application/json",
-        "X-Shopify-Access-Token": access_token,
-    }
+    # shopify_graphql_url = f"https://{shop_url}/admin/api/{os.environ.get('SHOPIFY_API_VERSION')}/graphql.json"
+    # headers = {
+    #     "Content-Type": "application/json",
+    #     "X-Shopify-Access-Token": access_token,
+    # }
 
+    # query = """
+    # {
+    #     currentAppInstallation {
+    #         activeSubscriptions {
+    #             id
+    #             status
+    #         }
+    #     }
+    # }
+    # """
 
-    query = """
-    {
-        currentAppInstallation {
-            activeSubscriptions {
-                id
-                status
-            }
-        }
-    }
-    """
+    # # Fetch active subscriptions
+    # logger.debug(f"Sending GraphQL query to {shopify_graphql_url}")
+    # response = requests.post(shopify_graphql_url, json={'query': query}, headers=headers)
+    # if response.status_code != 200:
+    #     logger.error(f"API returned status {response.status_code}: {response.text}")
+    #     return False
 
+    # response_data = response.json()
+    # if 'errors' in response_data:
+    #     logger.error(f"Error fetching subscriptions: {response_data['errors']}")
+    #     return False
 
-    response = requests.post(shopify_graphql_url, json={'query': query}, headers=headers)
-    response_data = response.json()
+    # active_subscriptions = response_data.get("data", {}).get("currentAppInstallation", {}).get("activeSubscriptions", [])
 
-    if 'errors' in response_data:
-        logger.error(f"Error fetching subscriptions: {response_data['errors']}")
+    # if not active_subscriptions:
+    #     logger.info(f"No active subscriptions found for shop_url: {shop_url}")
+    #     return True  
+
+    # # Cancel each subscription
+    # for subscription in active_subscriptions:
+    #     subscription_id = subscription['id']
+    #     cancel_query = """
+    #     mutation appSubscriptionCancel($id: ID!) {
+    #         appSubscriptionCancel(id: $id) {
+    #             userErrors {
+    #                 field
+    #                 message
+    #             }
+    #         }
+    #     }
+    #     """
+    #     variables = {"id": subscription_id}
+    #     cancel_response = requests.post(shopify_graphql_url, json={'query': cancel_query, 'variables': variables}, headers=headers)
+
+    #     if cancel_response.status_code != 200:
+    #         logger.error(f"Error canceling subscription {subscription_id}: {cancel_response.text}")
+    #         return False
+
+    #     cancel_response_data = cancel_response.json()
+    #     if cancel_response_data.get("errors"):
+    #         logger.error(f"Error canceling subscription {subscription_id}: {cancel_response_data['errors']}")
+    #         return False
+
+    #     user_errors = cancel_response_data.get("data", {}).get("appSubscriptionCancel", {}).get("userErrors", [])
+    #     if user_errors:
+    #         errors = [f"{error['field']}: {error['message']}" for error in user_errors]
+    #         logger.error(f"User errors while canceling subscription {subscription_id}: {errors}")
+    #         return False
+        
+    #     logger.info(f"Canceled subscription with ID {subscription_id} for shop_url: {shop_url}")
+
+    # Update local database
+    try:
+        client = Client.objects.get(shop_url=shop_url)
+        shop_id = client.shop_id
+        client.member = False
+        client.save()
+
+        subscription = Subscription.objects.filter(shop_id=shop_id, status='active').first()
+        if subscription:
+            subscription.status = 'cancelled'
+            subscription.cancelled_at = timezone.now()
+            subscription.save()
+            logger.info(f"Subscription for shop_id {shop_id} cancelled.")
+            
+            Usage.objects.filter(subscription=subscription).delete()
+            logger.info(f"Deleted usage records for subscriptions {subscription.subscription_id}.")
+            
+            subscription.delete()
+            logger.info(f"Deleted subscription {subscription.subscription_id} for shop_id {shop_id}.")
+
+        BillingTokens.objects.filter(shop_id=shop_id).delete()
+        logger.info(f"Deleted all BillingTokens for shop_id {shop_id}.")
+        
+    except Exception as e:
+        logger.error(f"Error updating local records for shop {shop_url}: {e}")
         return False
-
-    active_subscriptions = response_data.get("data", {}).get("currentAppInstallation", {}).get("activeSubscriptions", [])
-
-    if not active_subscriptions:
-        logger.info(f"No active subscriptions found for shop_url: {shop_url}")
-        return True  
-
-
-    for subscription in active_subscriptions:
-        subscription_id = subscription['id']
-
-
-        cancel_query = """
-        mutation appSubscriptionCancel($id: ID!) {
-            appSubscriptionCancel(id: $id) {
-                userErrors {
-                    field
-                    message
-                }
-            }
-        }
-        """
-        variables = {"id": subscription_id}
-
-        
-        cancel_response = requests.post(shopify_graphql_url, json={'query': cancel_query, 'variables': variables}, headers=headers)
-        cancel_response_data = cancel_response.json()
-
-        if cancel_response_data.get("errors"):
-            logger.error(f"Error canceling subscription {subscription_id}: {cancel_response_data['errors']}")
-            return False
-
-        user_errors = cancel_response_data.get("data", {}).get("appSubscriptionCancel", {}).get("userErrors", [])
-        if user_errors:
-            errors = [f"{error['field']}: {error['message']}" for error in user_errors]
-            logger.error(f"User errors while canceling subscription {subscription_id}: {errors}")
-            return False
-        
-        logger.info(f"Canceled subscription with ID {subscription_id} for shop_url: {shop_url}")
-
-
-    client = Client.objects.get(shop_url=shop_url)
-    shop_id = client.shop_id
-    client.member=False
-    client.save()
-    
-    subscription = Subscription.objects.filter(shop_id=shop_id, status='active').first()
-    if subscription:
-        subscription.status = 'cancelled'
-        subscription.cancelled_at = timezone.now()
-        subscription.save()
-        logger.info(f"Subscription for shop_id {shop_id} cancelled.")
-
-    
-    BillingTokens.objects.filter(shop_id=shop_id).delete()
-    logger.info(f"Deleted all BillingTokens for shop_id {shop_id}.")
 
     return True
 
 
-@api_view(['GET'])
-@permission_classes([AllowAny])
 @csrf_exempt
+@api_view(['POST'])
+@permission_classes([AllowAny])
 def handle_app_uninstall(request):
-    shop_id = request.GET.get('shop_id', None)
-    if not shop_id:
-        logger.error('shop_id missing in request data')
-        return Response({'error': 'shop_id missing'}, status=status.HTTP_400_BAD_REQUEST)
-    
     try:
-        client = Client.objects.get(shop_id=shop_id)
+        shopify_hmac = request.headers.get('X-Shopify-Hmac-SHA256')
+        if not shopify_hmac:
+            logger.error("Missing HMAC header in webhook request")
+            return Response({"error": "Invalid Webhook"}, status=status.HTTP_400_BAD_REQUEST)
+
+        secret = os.environ.get('SHOPIFY_API_SECRET')
+        if not secret:
+            logger.error("Shopify API secret is missing from environment")
+            return Response({"error": "Internal Server Error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        request_body = request.body
+        calculated_hmac = base64.b64encode(
+            hmac.new(secret.encode("utf-8"), request_body, hashlib.sha256).digest()
+        ).decode("utf-8")
+        logger.debug(f"Calculated HMAC: {calculated_hmac}")
+        logger.debug(f"Received HMAC: {shopify_hmac}")
+
+        if not hmac.compare_digest(calculated_hmac, shopify_hmac):
+            logger.error("Invalid HMAC signature for webhook.")
+            return Response({"error": "Unauthorized webhook"}, status=status.HTTP_403_FORBIDDEN)
+
+        payload = json.loads(request_body)
+        shop_id = payload.get("id")
+        if not shop_id:
+            logger.error("shop_id missing in webhook payload")
+            return Response({"error": "shop_id missing"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            client = Client.objects.get(shop_id=shop_id)
+        except Client.DoesNotExist:
+            logger.error(f"Client not found for shop_id: {shop_id}")
+            return Response({"error": "Client not found"}, status=status.HTTP_404_NOT_FOUND)
+
         shop_url = client.shop_url
         access_token = get_access_token(shop_url)
-
-        if not shop_url:
-            logger.error('Shop URL not found for shop_id: %s', shop_id)
-            return Response({'error': 'Shop URL not found'}, status=status.HTTP_400_BAD_REQUEST)
-        
         if not access_token:
-            logger.error('Access token not found for shop_url: %s', shop_url)
-            return Response({'error': 'Access token not found'}, status=status.HTTP_400_BAD_REQUEST)   
+            logger.error(f"Access token not found for shop_url: {shop_url}")
+            return Response({"error": "Access token not found"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        logger.debug(f"accesstoken found : {access_token}")
 
-        is_cancelled = cancel_active_recurring_charges(shop_url, access_token)
-        
-        if is_cancelled:
-            logger.info('Successfully handled app uninstall for shop_url: %s', shop_url)
-            return Response({'status': 'App uninstall handled successfully'}, status=status.HTTP_200_OK)
-        else:
-            logger.error('Failed to cancel recurring charges for shop_url: %s', shop_url)
-            return Response({'error': 'Failed to cancel recurring charges'}, status=status.HTTP_400_BAD_REQUEST)
-        
+        try:
+            is_cancelled = cancel_active_recurring_charges(shop_url, access_token)
+            if is_cancelled:
+                logger.info(f"Successfully handled uninstall for shop: {shop_url}")
+                return Response({"status": "App uninstall handled successfully"}, status=status.HTTP_200_OK)
+            else:
+                logger.error(f"Failed to cancel recurring charges for shop: {shop_url}")
+                return Response({"error": "Failed to cancel recurring charges"}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.exception(f"Error during recurring charge cancellation: {e}")
+            return Response({"error": "Internal Server Error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
     except Exception as e:
-        logger.exception('Error occurred while handling app uninstall: %s', str(e))
-        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
-    
+        logger.exception(f"Unexpected error in handle_app_uninstall: {e}")
+        return Response({"error": "Internal Server Error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
       
 #######################################################################################################################################
 #  ██████  ███    ██ ███████       ████████ ██ ███    ███ ███████     ██████   █████  ██    ██ ███    ███ ███████ ███    ██ ████████ 
