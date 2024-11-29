@@ -155,6 +155,7 @@ def async_fetch_and_store_products(shop_url, shop_id, collection_id, days):
             total_revenue += revenue
             total_sales += total_sold_units
 
+            logger.debug(f"here is the total sales of the collection {total_sales}")
             logger.debug(f"Updating product in database: {product_name} (ID: {product_id})")
 
             ClientProducts.objects.update_or_create(

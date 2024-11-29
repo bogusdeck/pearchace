@@ -1581,6 +1581,7 @@ def advance_config(request):
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])  # not tested
 def save_client_algorithm(request):
@@ -1744,6 +1745,54 @@ def update_all_algo(request, algo_id):
 
     except Exception as e:
         logger.exception("Unexpected error occurred during update_all_algo API execution")
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_collection_tags(request, collection_id):
+    auth_header = request.headers.get("Authorization", None)
+    if auth_header is None:
+        logger.error("Authorization header missing")
+        return Response(
+            {"error": "Authorization header missing"},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    try:
+        token = auth_header.split(" ")[1]
+        jwt_auth = JWTAuthentication()
+        validated_token = jwt_auth.get_validated_token(token)
+        user = jwt_auth.get_user(validated_token)
+
+        shop_id = user.shop_id
+        if not shop_id:
+            logger.warning("Shop ID not found for user: %s", user)
+            return Response(
+                {"error": "Shop ID not found"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            products = ClientProducts.objects.filter(collection_id=collection_id).exclude(tags=None)
+            
+            all_tags= set()
+            for product in products:
+                if product.tags:
+                    all_tags.update(product.tags)
+                    
+            return Response({"tags": list(all_tags)}, status=status.HTTP_200_OK)
+        
+        except ClientProducts.DoesNotExist:
+            logger.warning("No products found for this collection shop_id %s", shop_id)
+            return Response(
+                {"error": "Client's products for this collection not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+
+    except InvalidToken:
+        logger.error("Invalid token provided")
+        return Response({"error": "Invalid token"}, status=status.HTTP_401_UNAUTHORIZED)
+
+    except Exception as e:
+        logger.exception("Unexpected error in get_active_collections")
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     

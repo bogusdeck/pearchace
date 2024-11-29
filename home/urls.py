@@ -24,6 +24,7 @@ urlpatterns = [
     path('api/get-products/<str:collection_id>/', views.get_products, name='get-products'), #
     path('api/update-pinned-products/', views.update_pinned_products, name='update-pinned-products'), # 
     path('api/update-default-algo/', views.update_default_algo, name='update-default-algo'), # 
+    path('api/collections/<int:collection_id>/tags/', views.get_collection_tags, name='collection-tags'),
 
     # # global settings
     path('api/update-global-settings/', views.update_global_settings, name='update-global-settings'), # 
